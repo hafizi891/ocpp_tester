@@ -1,0 +1,97 @@
+{
+  "protocol": "ocpp1.6",
+  "gatewayEndpointTemplate": "",
+  "baseGatewayEndpoint": "",
+  "commandPayloads": {
+    "RemoteStartTransaction": {
+      "connectorId": 1,
+      "idTag": "",
+      "chargingProfile": null
+    },
+    "RemoteStopTransaction": {
+      "transactionId": 0
+    },
+    "Reset": {
+      "type": "Soft"
+    },
+    "UnlockConnector": {
+      "connectorId": 1
+    },
+    "ChangeAvailability": {
+      "connectorId": 1,
+      "type": "Operative"
+    },
+    "ChangeConfiguration": {
+      "key": "HeartbeatInterval",
+      "value": "30"
+    },
+    "GetConfiguration": {
+      "key": []
+    },
+    "ClearCache": {},
+    "DataTransfer": {
+      "vendorId": "",
+      "messageId": "",
+      "data": ""
+    },
+    "TriggerMessage": {
+      "requestedMessage": "BootNotification",
+      "connectorId": null
+    },
+    "GetDiagnostics": {
+      "location": "",
+      "retries": null,
+      "retryInterval": null,
+      "startTime": null,
+      "stopTime": null
+    },
+    "UpdateFirmware": {
+      "location": "",
+      "retrieveDate": "",
+      "retries": null,
+      "retryInterval": null
+    },
+    "GetLocalListVersion": {},
+    "SendLocalList": {
+      "listVersion": 1,
+      "updateType": "Full",
+      "localAuthorizationList": []
+    },
+    "ReserveNow": {
+      "connectorId": 1,
+      "expiryDate": "",
+      "idTag": "",
+      "reservationId": 0,
+      "parentIdTag": null
+    },
+    "CancelReservation": {
+      "reservationId": 0
+    },
+    "SetChargingProfile": {
+      "connectorId": 0,
+      "csChargingProfiles": {
+        "chargingProfileId": 1,
+        "stackLevel": 0,
+        "chargingProfilePurpose": "ChargePointMaxProfile",
+        "chargingProfileKind": "Absolute",
+        "chargingSchedule": {
+          "chargingRateUnit": "W",
+          "chargingSchedulePeriod": [
+            { "startPeriod": 0, "limit": 22000 }
+          ]
+        }
+      }
+    },
+    "ClearChargingProfile": {
+      "id": null,
+      "connectorId": null,
+      "chargingProfilePurpose": null,
+      "stackLevel": null
+    },
+    "GetCompositeSchedule": {
+      "connectorId": 1,
+      "duration": 86400,
+      "chargingRateUnit": null
+    }
+  }
+}

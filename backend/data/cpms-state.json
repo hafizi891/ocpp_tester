@@ -1,0 +1,190 @@
+{
+  "chargers": [
+    {
+      "id": "CP-01",
+      "station": "A-01",
+      "status": "idle",
+      "kw": 22,
+      "maxKw": 22,
+      "ocppIdentity": "A-01-CP-01"
+    },
+    {
+      "id": "CP-02",
+      "station": "A-01",
+      "status": "active",
+      "kw": 22,
+      "maxKw": 22,
+      "ocppIdentity": "A-01-CP-02"
+    },
+    {
+      "id": "CP-03",
+      "station": "A-01",
+      "status": "idle",
+      "kw": 0,
+      "maxKw": 22,
+      "ocppIdentity": "A-01-CP-03"
+    },
+    {
+      "id": "CP-04",
+      "station": "A-01",
+      "status": "active",
+      "kw": 21.8,
+      "maxKw": 22,
+      "ocppIdentity": "A-01-CP-04"
+    },
+    {
+      "id": "CP-05",
+      "station": "A-01",
+      "status": "active",
+      "kw": 22,
+      "maxKw": 22,
+      "ocppIdentity": "A-01-CP-05"
+    },
+    {
+      "id": "CP-06",
+      "station": "A-01",
+      "status": "idle",
+      "kw": 0,
+      "maxKw": 22,
+      "ocppIdentity": "A-01-CP-06"
+    },
+    {
+      "id": "CP-07",
+      "station": "A-01",
+      "status": "fault",
+      "kw": 0,
+      "maxKw": 22,
+      "ocppIdentity": "A-01-CP-07"
+    },
+    {
+      "id": "CP-08",
+      "station": "A-01",
+      "status": "active",
+      "kw": 21.9,
+      "maxKw": 22,
+      "ocppIdentity": "A-01-CP-08"
+    },
+    {
+      "id": "CP-09",
+      "station": "A-01",
+      "status": "idle",
+      "kw": 0,
+      "maxKw": 22,
+      "ocppIdentity": "A-01-CP-09"
+    },
+    {
+      "id": "CP-10",
+      "station": "A-01",
+      "status": "active",
+      "kw": 22,
+      "maxKw": 22,
+      "ocppIdentity": "A-01-CP-10"
+    },
+    {
+      "id": "CP-11",
+      "station": "A-01",
+      "status": "idle",
+      "kw": 0,
+      "maxKw": 22,
+      "ocppIdentity": "A-01-CP-11"
+    },
+    {
+      "id": "CP-12",
+      "station": "A-01",
+      "status": "active",
+      "kw": 21.8,
+      "maxKw": 22,
+      "ocppIdentity": "A-01-CP-12"
+    },
+    {
+      "id": "BASE-CP-001",
+      "station": "Discovered",
+      "status": "idle",
+      "kw": 0,
+      "maxKw": 22,
+      "ocppIdentity": "BASE-CP-001"
+    }
+  ],
+  "sessions": [
+    {
+      "id": 1,
+      "chargerId": "CP-01",
+      "user": "A. Rahman",
+      "startedAt": "16:02",
+      "energyKwh": 50.44,
+      "amount": 61.24,
+      "status": "charging"
+    },
+    {
+      "id": 2,
+      "chargerId": "CP-05",
+      "user": "S. Lim",
+      "startedAt": "15:47",
+      "energyKwh": 54.04,
+      "amount": 65.56,
+      "status": "charging"
+    },
+    {
+      "id": 3,
+      "chargerId": "CP-03",
+      "user": "K. Patel",
+      "startedAt": "14:30",
+      "energyKwh": 31.2,
+      "amount": 37.44,
+      "status": "completed"
+    },
+    {
+      "id": 4,
+      "chargerId": "CP-10",
+      "user": "N. Aziz",
+      "startedAt": "14:05",
+      "energyKwh": 41.64,
+      "amount": 50.68,
+      "status": "charging"
+    },
+    {
+      "id": 5,
+      "chargerId": "CP-07",
+      "user": "System",
+      "startedAt": "13:20",
+      "energyKwh": 0,
+      "amount": 0,
+      "status": "fault"
+    },
+    {
+      "id": 6,
+      "chargerId": "CP-06",
+      "user": "J. Tan",
+      "startedAt": "12:58",
+      "energyKwh": 28.8,
+      "amount": 34.56,
+      "status": "completed"
+    }
+  ],
+  "hourlyEnergy": [
+    2,
+    1,
+    1,
+    0,
+    1,
+    2,
+    9,
+    24,
+    38,
+    44,
+    40,
+    32,
+    30,
+    34,
+    38,
+    42,
+    55,
+    60,
+    50,
+    38,
+    24,
+    15,
+    8,
+    4
+  ]
+}

@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment — never commit real credentials
+.env
+backend/.env
+frontend/.env
+frontend/.env.local
+
+# Logs
+*.log
+*.err.log
+*.out.log
+
+# Build output
+frontend/dist/
+frontend/build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Claude internal
+.claude/

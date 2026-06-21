@@ -1,0 +1,8 @@
+[
+  { "layer": "Charge point gateway", "responsibility": "Accept raw OCPP WebSocket connections at /ocpp/:chargePointId and validate charger identity, protocol, and lifecycle messages." },
+  { "layer": "Protocol handler", "responsibility": "Parse OCPP CALL/CALLRESULT/CALLERROR frames, then map BootNotification, Heartbeat, StatusNotification, MeterValues, Authorize, StartTransaction, and StopTransaction into CPMS domain events." },
+  { "layer": "Command service", "responsibility": "Queue operator commands such as RemoteStartTransaction, RemoteStopTransaction, Reset, UnlockConnector, ChangeAvailability, and ChangeConfiguration." },
+  { "layer": "Operations API", "responsibility": "Expose normalized charge point, session, meter, alert, command, tariff, user, and report data to the frontend." },
+  { "layer": "Persistence boundary", "responsibility": "Replace current JSON storage with database tables for chargers, connectors, sessions, meter values, idTags, commands, events, tariffs, and audit logs." },
+  { "layer": "Frontend console", "responsibility": "Show station health, OCPP connection state, protocol events, command queue, remote controls, sessions, energy, revenue, and faults." }
+]
