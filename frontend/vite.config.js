@@ -8,7 +8,7 @@ export default defineConfig({
   server: {
     port: Number(process.env.DEV_PORT) || 5173,
     host: true,
-    allowedHosts: 'all',
+    allowedHosts: true,
     proxy: {
       '/api': {
         target: BACKEND_URL,
