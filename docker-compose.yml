@@ -17,7 +17,7 @@ services:
         VITE_API_URL: ""     # empty = frontend uses relative URLs via nginx proxy
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "8080:80"
     depends_on:
       - backend
 
