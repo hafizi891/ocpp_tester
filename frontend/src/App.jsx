@@ -227,13 +227,41 @@ function HistoryPage({ sessions }) {
 
 // ── Control Page ──────────────────────────────────────────────────────────────
 
-const QUICK_ACTIONS = [
-  { label: 'Soft Reset',     action: 'Reset',            payload: { type: 'Soft' } },
-  { label: 'Hard Reset',     action: 'Reset',            payload: { type: 'Hard' } },
-  { label: 'Unlock',         action: 'UnlockConnector',  payload: { connectorId: 1 } },
-  { label: 'Clear Cache',    action: 'ClearCache',       payload: {} },
-  { label: 'Get Config',     action: 'GetConfiguration', payload: {} },
-  { label: 'Trigger Status', action: 'TriggerMessage',   payload: { requestedMessage: 'StatusNotification' } },
+const ACTION_GROUPS = [
+  {
+    title: 'Reset & Cache',
+    actions: [
+      { label: 'Soft Reset',  action: 'Reset',      payload: { type: 'Soft' } },
+      { label: 'Hard Reset',  action: 'Reset',      payload: { type: 'Hard' } },
+      { label: 'Clear Cache', action: 'ClearCache', payload: {} },
+    ],
+  },
+  {
+    title: 'Connector',
+    actions: [
+      { label: 'Unlock',       action: 'UnlockConnector',      payload: { connectorId: 1 } },
+      { label: 'Set Operative',   action: 'ChangeAvailability', payload: { connectorId: 1, type: 'Operative' } },
+      { label: 'Set Inoperative', action: 'ChangeAvailability', payload: { connectorId: 1, type: 'Inoperative' } },
+    ],
+  },
+  {
+    title: 'Trigger Message',
+    actions: [
+      { label: 'Status',       action: 'TriggerMessage', payload: { requestedMessage: 'StatusNotification' } },
+      { label: 'Heartbeat',    action: 'TriggerMessage', payload: { requestedMessage: 'Heartbeat' } },
+      { label: 'Boot Notify',  action: 'TriggerMessage', payload: { requestedMessage: 'BootNotification' } },
+      { label: 'Meter Values', action: 'TriggerMessage', payload: { requestedMessage: 'MeterValues', connectorId: 1 } },
+    ],
+  },
+  {
+    title: 'Configuration',
+    actions: [
+      { label: 'Get Config',        action: 'GetConfiguration', payload: {} },
+      { label: 'Get Local List',    action: 'GetLocalListVersion', payload: {} },
+      { label: 'Clear Charging Profile', action: 'ClearChargingProfile', payload: { id: 0, connectorId: 0 } },
+      { label: 'Get Schedule',      action: 'GetCompositeSchedule', payload: { connectorId: 1, duration: 3600 } },
+    ],
+  },
 ];
 
 function ControlPage({ ocppCharger, ocppConfig, ocppMessages, onCommand }) {
@@ -241,9 +269,9 @@ function ControlPage({ ocppCharger, ocppConfig, ocppMessages, onCommand }) {
 
   const isOnline = ocppCharger?.connectionState === 'connected';
 
-  async function fire(action, payload) {
+  async function fire(key, action, payload) {
     if (busy) return;
-    setBusy(action);
+    setBusy(key);
     try { await onCommand(action, payload); } catch (_) {}
     finally { setTimeout(() => setBusy(null), 1500); }
   }
@@ -297,19 +325,26 @@ function ControlPage({ ocppCharger, ocppConfig, ocppMessages, onCommand }) {
         )}
       </div>
 
-      <div className="section-title">Quick Actions</div>
-      <div className="quick-grid">
-        {QUICK_ACTIONS.map(({ label, action, payload }) => (
-          <button
-            key={label}
-            className="quick-btn"
-            disabled={!isOnline || busy !== null}
-            onClick={() => fire(action, payload)}
-          >
-            {busy === action ? '…' : label}
-          </button>
-        ))}
-      </div>
+      {ACTION_GROUPS.map(group => (
+        <div key={group.title}>
+          <div className="section-title">{group.title}</div>
+          <div className="quick-grid">
+            {group.actions.map(({ label, action, payload }) => {
+              const key = `${action}:${label}`;
+              return (
+                <button
+                  key={key}
+                  className="quick-btn"
+                  disabled={!isOnline || busy !== null}
+                  onClick={() => fire(key, action, payload)}
+                >
+                  {busy === key ? '…' : label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
 
       <div className="section-title">Recent Messages</div>
       <div className="msg-list">
