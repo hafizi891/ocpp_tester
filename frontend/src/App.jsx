@@ -292,6 +292,75 @@ const ACTION_GROUPS = [
       { label: 'Get Schedule',      action: 'GetCompositeSchedule', payload: { connectorId: 1, duration: 3600 } },
     ],
   },
+  {
+    title: 'Charging Profile',
+    actions: [
+      {
+        label: 'Set Max 3-Phase (22kW)',
+        action: 'SetChargingProfile',
+        payload: {
+          connectorId: 0,
+          csChargingProfiles: {
+            chargingProfileId: 1, stackLevel: 0,
+            chargingProfilePurpose: 'ChargePointMaxProfile',
+            chargingProfileKind: 'Absolute',
+            chargingSchedule: {
+              chargingRateUnit: 'A',
+              chargingSchedulePeriod: [{ startPeriod: 0, limit: 32, numberPhases: 3 }],
+            },
+          },
+        },
+      },
+      {
+        label: 'Set Max 1-Phase (7.4kW)',
+        action: 'SetChargingProfile',
+        payload: {
+          connectorId: 0,
+          csChargingProfiles: {
+            chargingProfileId: 1, stackLevel: 0,
+            chargingProfilePurpose: 'ChargePointMaxProfile',
+            chargingProfileKind: 'Absolute',
+            chargingSchedule: {
+              chargingRateUnit: 'A',
+              chargingSchedulePeriod: [{ startPeriod: 0, limit: 32, numberPhases: 1 }],
+            },
+          },
+        },
+      },
+      {
+        label: 'Limit to 50% (11kW)',
+        action: 'SetChargingProfile',
+        payload: {
+          connectorId: 1,
+          csChargingProfiles: {
+            chargingProfileId: 2, stackLevel: 0,
+            chargingProfilePurpose: 'TxDefaultProfile',
+            chargingProfileKind: 'Relative',
+            chargingSchedule: {
+              chargingRateUnit: 'W',
+              chargingSchedulePeriod: [{ startPeriod: 0, limit: 11000 }],
+            },
+          },
+        },
+      },
+      {
+        label: 'Limit to 25% (5.5kW)',
+        action: 'SetChargingProfile',
+        payload: {
+          connectorId: 1,
+          csChargingProfiles: {
+            chargingProfileId: 2, stackLevel: 0,
+            chargingProfilePurpose: 'TxDefaultProfile',
+            chargingProfileKind: 'Relative',
+            chargingSchedule: {
+              chargingRateUnit: 'W',
+              chargingSchedulePeriod: [{ startPeriod: 0, limit: 5500 }],
+            },
+          },
+        },
+      },
+    ],
+  },
 ];
 
 function ControlPage({ ocppCharger, ocppConfig, ocppMessages, onCommand }) {
