@@ -419,10 +419,21 @@ async function applyOcppDomainEvent(charger, action, payload) {
   }
 
   if (action === 'MeterValues') {
-    const sv    = payload.meterValue?.[0]?.sampledValue?.[0];
-    const value = Number(sv?.value);
-    if (!Number.isNaN(value)) {
-      const kw   = Math.min(charger.maxKw, Math.max(0, Math.round((value / 1000) * 10) / 10));
+    const samples = payload.meterValue?.[0]?.sampledValue || [];
+    // Prefer Power.Active.Import (W), fall back to Current.Import L1 × Voltage L1-N
+    const powerSv   = samples.find(s => s.measurand === 'Power.Active.Import');
+    const currentSv = samples.find(s => s.measurand === 'Current.Import' && (!s.phase || s.phase === 'L1'));
+    const voltageSv = samples.find(s => s.measurand === 'Voltage' && (!s.phase || s.phase === 'L1-N'));
+
+    let kw = null;
+    if (powerSv) {
+      kw = Number(powerSv.value) / 1000;
+    } else if (currentSv && voltageSv) {
+      kw = (Number(currentSv.value) * Number(voltageSv.value)) / 1000;
+    }
+
+    if (kw !== null && !Number.isNaN(kw)) {
+      kw = Math.min(charger.maxKw, Math.max(0, Math.round(kw * 10) / 10));
       charger.kw = kw;
       await queries.updateChargerKw(pool, charger.id, kw);
     }
