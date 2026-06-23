@@ -288,7 +288,7 @@ const ACTION_GROUPS = [
     actions: [
       { label: 'Get Config',        action: 'GetConfiguration', payload: {} },
       { label: 'Get Local List',    action: 'GetLocalListVersion', payload: {} },
-      { label: 'Clear Charging Profile', action: 'ClearChargingProfile', payload: { id: 0, connectorId: 0 } },
+      { label: 'Clear Charging Profile', action: 'ClearChargingProfile', payload: {} },
       { label: 'Get Schedule',      action: 'GetCompositeSchedule', payload: { connectorId: 1, duration: 3600 } },
     ],
   },
