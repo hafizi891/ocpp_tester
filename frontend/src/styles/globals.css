@@ -553,6 +553,40 @@ body {
   animation: pulse-dot 2s ease-in-out infinite;
 }
 
+/* ── Last response card ──────────────────────────────────────────────────── */
+.response-card {
+  background: var(--carbon);
+  border-radius: var(--r-card);
+  margin: 0 16px;
+  padding: 14px 16px;
+  overflow: hidden;
+}
+
+.response-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.response-action {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--orange);
+}
+
+.response-payload {
+  font-family: 'Consolas', monospace;
+  font-size: 12px;
+  color: rgba(255,255,255,0.85);
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+  line-height: 1.6;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
 /* ── Solar page ──────────────────────────────────────────────────────────── */
 .solar-status-pill {
   font-size: 11px;

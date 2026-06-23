@@ -347,7 +347,26 @@ function ControlPage({ ocppCharger, ocppConfig, ocppMessages, onCommand }) {
         </div>
       ))}
 
-      <div className="section-title">Recent Messages</div>
+      {/* Last response */}
+      {ocppMessages.find(m => m.direction === 'inbound') && (() => {
+        const last = ocppMessages.find(m => m.direction === 'inbound');
+        return (
+          <div>
+            <div className="section-title">Last Response</div>
+            <div className="response-card">
+              <div className="response-header">
+                <span className="response-action">{last.action}</span>
+                <span className="msg-ts mono">{formatTime(last.ts)}</span>
+              </div>
+              <pre className="response-payload">
+                {JSON.stringify(last.payload, null, 2)}
+              </pre>
+            </div>
+          </div>
+        );
+      })()}
+
+      <div className="section-title">Message Log</div>
       <div className="msg-list">
         {ocppMessages.length === 0 ? (
           <div className="empty-state">No messages yet</div>
