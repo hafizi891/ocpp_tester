@@ -9,6 +9,7 @@ import {
   fetchOcppMessages,
   sendOcppCommand,
   fetchLogs,
+  forceCloseSession,
 } from './api';
 import BottomNav from './components/BottomNav';
 import SolarPage from './components/SolarPage';
@@ -55,8 +56,9 @@ function fmt(n, dec = 2) {
 
 // ── Home Page ─────────────────────────────────────────────────────────────────
 
-function HomePage({ charger, ocppCharger, activeSession, connected, onCommand }) {
+function HomePage({ charger, ocppCharger, activeSession, connected, onCommand, onForceClose }) {
   const [busy, setBusy] = useState(false);
+  const [stopSent, setStopSent] = useState(false);
 
   const isCharging = charger?.status === 'active';
   const isFault    = charger?.status === 'fault';
@@ -72,6 +74,9 @@ function HomePage({ charger, ocppCharger, activeSession, connected, onCommand })
     : isOnline ? 'available'
     : 'offline';
 
+  // Stuck session: DB shows charging but charger is not active
+  const stuckSession = activeSession && !isCharging;
+
   async function handleAction() {
     if (busy) return;
     setBusy(true);
@@ -79,7 +84,9 @@ function HomePage({ charger, ocppCharger, activeSession, connected, onCommand })
       if (isCharging) {
         const txId = activeSession?.transactionId ?? activeSession?.id ?? 0;
         await onCommand('RemoteStopTransaction', { transactionId: Number(txId) });
+        setStopSent(true); // show force-close hint after sending stop
       } else {
+        setStopSent(false);
         await onCommand('RemoteStartTransaction', { idTag: 'GUEST', connectorId: 1 });
       }
     } catch (_) {
@@ -144,8 +151,11 @@ function HomePage({ charger, ocppCharger, activeSession, connected, onCommand })
         )}
       </div>
 
-      {isCharging && activeSession && (
+      {(isCharging || stuckSession) && activeSession && (
         <div className="info-card">
+          {stuckSession && (
+            <p className="info-warn">Session stuck — charger may have stopped locally</p>
+          )}
           {(activeSession.user || activeSession.idTag) && (
             <div className="info-row">
               <span className="info-label">User</span>
@@ -170,18 +180,36 @@ function HomePage({ charger, ocppCharger, activeSession, connected, onCommand })
               <span className="info-value">{activeSession.meterStart} → {activeSession.meterStop ?? '…'} Wh</span>
             </div>
           )}
+          {activeSession.transactionId != null && (
+            <div className="info-row">
+              <span className="info-label">Tx ID</span>
+              <span className="info-value info-mono">{activeSession.transactionId}</span>
+            </div>
+          )}
         </div>
       )}
 
       <div className="action-section">
-        <button
-          className={`action-btn ${isCharging ? 'stop' : 'start'}`}
-          disabled={!isOnline || busy}
-          onClick={handleAction}
-        >
-          {busy ? 'Sending…' : isCharging ? 'Stop Charging' : 'Start Charging'}
-        </button>
-        {!isOnline && <p className="action-hint">Charger is offline</p>}
+        {stuckSession ? (
+          <button className="action-btn stop" onClick={() => onForceClose(activeSession.id)}>
+            Force Close Session
+          </button>
+        ) : (
+          <button
+            className={`action-btn ${isCharging ? 'stop' : 'start'}`}
+            disabled={!isOnline || busy}
+            onClick={handleAction}
+          >
+            {busy ? 'Sending…' : isCharging ? 'Stop Charging' : 'Start Charging'}
+          </button>
+        )}
+        {isCharging && stopSent && (
+          <p className="action-hint">
+            Stop sent. If charger still shows charging,{' '}
+            <button className="link-btn" onClick={() => onForceClose(activeSession?.id)}>force close</button>
+          </p>
+        )}
+        {!isOnline && !stuckSession && <p className="action-hint">Charger is offline</p>}
       </div>
     </div>
   );
@@ -465,7 +493,15 @@ export default function App() {
     return sendOcppCommand(ocppCharger.ocppIdentity, action, payload);
   }
 
-  const shared = { charger, ocppCharger, activeSession, connected, onCommand };
+  async function onForceClose(sessionId) {
+    try {
+      await forceCloseSession(sessionId);
+    } catch (err) {
+      console.error('force-close failed:', err);
+    }
+  }
+
+  const shared = { charger, ocppCharger, activeSession, connected, onCommand, onForceClose };
 
   return (
     <div className="app-shell">

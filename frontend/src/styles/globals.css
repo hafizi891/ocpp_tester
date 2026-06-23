@@ -233,6 +233,19 @@ body {
   color: var(--carbon);
 }
 
+.info-mono {
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.info-warn {
+  font-size: 12px;
+  color: var(--red);
+  text-align: center;
+  padding: 8px 16px 4px;
+  margin: 0;
+}
+
 /* ── Action section ──────────────────────────────────────────────────────── */
 .action-section {
   display: flex;
@@ -264,6 +277,20 @@ body {
   font-size: 13px;
   color: var(--muted);
   text-align: center;
+}
+
+.action-hint.error {
+  color: var(--red);
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--orange);
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0 4px;
 }
 
 /* ── Session list (History) ──────────────────────────────────────────────── */

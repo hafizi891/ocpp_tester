@@ -30,6 +30,8 @@ export const sendOcppCommand = (chargePointId, action, payload) => (
   post(`/api/ocpp/charge-points/${encodeURIComponent(chargePointId)}/commands`, { action, payload })
 );
 
+export const forceCloseSession = (id) => post(`/api/sessions/${id}/force-close`, {});
+
 export const fetchLogs = (lines = 80) => get(`/api/logs?lines=${lines}`);
 export const fetchSolarConfig = () => get('/api/solar/config');
 export const fetchSolarStatus = () => get('/api/solar/status');

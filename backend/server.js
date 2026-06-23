@@ -75,6 +75,35 @@ app.get('/api/chargers',        (_req, res) => res.json(chargers));
 app.get('/api/sessions',        (_req, res) => res.json(sessions));
 app.get('/api/energy/hourly',   (_req, res) => res.json(hourlyPayload()));
 
+app.post('/api/sessions/:id/force-close', async (req, res) => {
+  const sid     = isNaN(req.params.id) ? req.params.id : Number(req.params.id);
+  const session = sessions.find(s => s.id === sid);
+  if (!session)                     return res.status(404).json({ error: 'Session not found' });
+  if (session.status !== 'charging') return res.status(400).json({ error: 'Session not active' });
+  try {
+    session.status    = 'completed';
+    session.stopReason = 'Local';
+    await queries.updateSessionOnStop(pool, session.id, {
+      status: 'completed', energyKwh: session.energyKwh,
+      amount: session.amount, meterStop: null, stopReason: 'Local',
+    });
+    const charger = findCharger(session.chargerId);
+    if (charger) {
+      charger.status = 'idle';
+      charger.kw     = 0;
+      await Promise.all([
+        queries.updateChargerStatus(pool, charger.id, 'idle'),
+        queries.updateChargerKw(pool, charger.id, 0),
+      ]);
+    }
+    io.emit('sessions:update', sessions);
+    io.emit('chargers:update', chargers);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/stats', (_req, res) => {
   const active  = chargers.filter(c => c.status === 'active').length;
   const totalKw = sessions.reduce((s, x) => s + x.energyKwh, 0);
@@ -414,13 +443,13 @@ async function applyOcppDomainEvent(charger, action, payload) {
 
 async function handleStartTransaction(payload, ocppIdentity, charger) {
   const { connectorId = 1, idTag, meterStart = 0 } = payload;
-  const transactionId = Date.now();
+  // Keep within 32-bit signed int range — some charger firmware (xMiles etc.) truncates larger values
+  const transactionId = Date.now() & 0x7FFFFFFF;
   const idTagInfo     = await resolveIdTagInfo(idTag);
 
   if (idTagInfo.status === 'Accepted' && charger) {
     try {
-      const now       = new Date();
-      const startedAt = now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      const startedAt = new Date().toISOString();
 
       const newSession = await queries.insertSession(pool, {
         chargerId: charger.id,
