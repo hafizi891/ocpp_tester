@@ -138,6 +138,23 @@ app.get('/api/ocpp/charge-points', (_req, res) => res.json(chargers.map(toOcppCh
 app.get('/api/ocpp/messages',      (_req, res) => res.json(ocppMessages.slice(-MSG_HISTORY_LIMIT).reverse()));
 app.get('/api/ocpp/commands',      (_req, res) => res.json(ocppCommands.slice(-MSG_HISTORY_LIMIT).reverse()));
 
+// ── System logs ───────────────────────────────────────────────────────────
+app.get('/api/logs', (req, res) => {
+  const lines = Math.min(200, parseInt(req.query.lines) || 80);
+  const os    = require('os');
+  const home  = process.env.HOME || os.homedir();
+  const logFile = `${home}/.pm2/logs/backend-out.log`;
+  const errFile = `${home}/.pm2/logs/backend-error.log`;
+  const { execSync } = require('child_process');
+  try {
+    const out = execSync(`tail -n ${lines} "${logFile}" 2>/dev/null || echo ''`).toString();
+    const err = execSync(`tail -n 20 "${errFile}" 2>/dev/null || echo ''`).toString();
+    res.json({ out: out.trim(), err: err.trim() });
+  } catch (_) {
+    res.json({ out: '', err: 'Log file not found' });
+  }
+});
+
 // ── Solar power management ────────────────────────────────────────────────
 app.get ('/api/solar/config', (_req, res) => res.json(solar.getConfig()));
 app.post('/api/solar/config', (req, res)  => res.json(solar.updateConfig(req.body)));

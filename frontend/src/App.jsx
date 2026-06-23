@@ -8,6 +8,7 @@ import {
   fetchOcppChargePoints,
   fetchOcppMessages,
   sendOcppCommand,
+  fetchLogs,
 } from './api';
 import BottomNav from './components/BottomNav';
 import SolarPage from './components/SolarPage';
@@ -266,7 +267,16 @@ const ACTION_GROUPS = [
 ];
 
 function ControlPage({ ocppCharger, ocppConfig, ocppMessages, onCommand }) {
-  const [busy, setBusy] = useState(null);
+  const [busy, setBusy]   = useState(null);
+  const [logs, setLogs]   = useState({ out: '', err: '' });
+  const [showLogs, setShowLogs] = useState(false);
+
+  useEffect(() => {
+    if (!showLogs) return;
+    fetchLogs().then(setLogs).catch(() => {});
+    const t = setInterval(() => fetchLogs().then(setLogs).catch(() => {}), 5000);
+    return () => clearInterval(t);
+  }, [showLogs]);
 
   const isOnline = ocppCharger?.connectionState === 'connected';
 
@@ -380,6 +390,19 @@ function ControlPage({ ocppCharger, ocppConfig, ocppMessages, onCommand }) {
           </div>
         ))}
       </div>
+
+      <div className="section-title">
+        System Logs
+        <button className="log-toggle-btn" onClick={() => setShowLogs(v => !v)}>
+          {showLogs ? 'Hide' : 'Show'}
+        </button>
+      </div>
+      {showLogs && (
+        <div className="log-box">
+          {logs.err && <pre className="log-err">{logs.err}</pre>}
+          <pre className="log-out">{logs.out || '(no output yet)'}</pre>
+        </div>
+      )}
     </div>
   );
 }
