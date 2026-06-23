@@ -6,12 +6,23 @@ const express             = require('express');
 const http                = require('http');
 const fs                  = require('fs');
 const path                = require('path');
+
+// ── RPi ACT LED indicator ─────────────────────────────────────────────────
+const LED_PATH    = '/sys/class/leds/ACT/brightness';
+const LED_TRIGGER = '/sys/class/leds/ACT/trigger';
+function setLed(on) {
+  try {
+    fs.writeFileSync(LED_TRIGGER, 'none');
+    fs.writeFileSync(LED_PATH, on ? '1' : '0');
+  } catch (_) {}  // silently ignored on non-RPi
+}
 const { Server }          = require('socket.io');
 const { WebSocketServer } = require('ws');
 const cors                = require('cors');
 
 const pool    = require('./db/pool');
 const queries = require('./db/queries');
+const solar   = require('./solar');
 
 // ── Configuration ─────────────────────────────────────────────────────────
 const FRONTEND_ORIGIN         = process.env.FRONTEND_ORIGIN         || 'http://localhost:5173';
@@ -127,6 +138,13 @@ app.get('/api/ocpp/charge-points', (_req, res) => res.json(chargers.map(toOcppCh
 app.get('/api/ocpp/messages',      (_req, res) => res.json(ocppMessages.slice(-MSG_HISTORY_LIMIT).reverse()));
 app.get('/api/ocpp/commands',      (_req, res) => res.json(ocppCommands.slice(-MSG_HISTORY_LIMIT).reverse()));
 
+// ── Solar power management ────────────────────────────────────────────────
+app.get ('/api/solar/config', (_req, res) => res.json(solar.getConfig()));
+app.post('/api/solar/config', (req, res)  => res.json(solar.updateConfig(req.body)));
+app.get ('/api/solar/status', (_req, res) => res.json(solar.getStatus()));
+app.post('/api/solar/manual', (req, res)  => res.json(solar.setManual(req.body?.kw)));
+app.post('/api/solar/clear',  (_req, res) => { solar.clearLimit(); res.json({ ok: true }); });
+
 app.post('/api/ocpp/charge-points/:id/commands', async (req, res) => {
   const charger = findCharger(req.params.id);
   if (!charger) return res.status(404).json({ error: 'Unknown charge point' });
@@ -189,6 +207,31 @@ async function main() {
   ]);
   ocppMessages = recentMessages;
   ocppCommands = recentCommands;
+
+  solar.init((availableKw) => {
+    const charger = chargers[0];
+    if (!charger) return;
+    if (availableKw === null) {
+      const cmd = createOcppCommand(charger.ocppIdentity, 'ClearChargingProfile', { id: 1, connectorId: 1 });
+      deliverCommand(cmd);
+    } else {
+      const limitW = Math.round(availableKw * 1000);
+      const cmd = createOcppCommand(charger.ocppIdentity, 'SetChargingProfile', {
+        connectorId: 1,
+        csChargingProfiles: {
+          chargingProfileId:     1,
+          stackLevel:            0,
+          chargingProfilePurpose:'TxDefaultProfile',
+          chargingProfileKind:   'Relative',
+          chargingSchedule: {
+            chargingRateUnit:        'W',
+            chargingSchedulePeriod:  [{ startPeriod: 0, limit: limitW }],
+          },
+        },
+      });
+      deliverCommand(cmd);
+    }
+  });
 
   server.listen(PORT, () => {
     const maskedDb = (process.env.DATABASE_URL || '').replace(/:[^:@]+@/, ':****@');
@@ -480,6 +523,7 @@ async function registerOcppConnection(ocppIdentity, ws, options = {}) {
   });
 
   publishOcppState();
+  setLed(true);
   if (!options.anonymous) flushPendingCommands(ocppIdentity);
 }
 
@@ -490,6 +534,8 @@ function markOcppDisconnected(ocppIdentity) {
   }
   logOcppMessage(ocppIdentity, 'system', 'WebSocketClose', {});
   publishOcppState();
+  const anyConnected = [...ocppConnections.values()].some(c => c.state === 'connected');
+  setLed(anyConnected);
 }
 
 async function addDiscoveredCharger(ocppIdentity) {

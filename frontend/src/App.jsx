@@ -10,6 +10,7 @@ import {
   sendOcppCommand,
 } from './api';
 import BottomNav from './components/BottomNav';
+import SolarPage from './components/SolarPage';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -428,6 +429,7 @@ export default function App() {
     <div className="app-shell">
       {tab === 'home'    && <HomePage    {...shared} />}
       {tab === 'history' && <HistoryPage sessions={sessions} />}
+      {tab === 'solar'   && <SolarPage   maxKw={charger?.maxKw || ocppCharger?.maxKw} />}
       {tab === 'control' && (
         <ControlPage
           ocppCharger={ocppCharger}

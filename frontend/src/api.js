@@ -29,3 +29,9 @@ export const fetchOcppCommands = () => get('/api/ocpp/commands');
 export const sendOcppCommand = (chargePointId, action, payload) => (
   post(`/api/ocpp/charge-points/${encodeURIComponent(chargePointId)}/commands`, { action, payload })
 );
+
+export const fetchSolarConfig = () => get('/api/solar/config');
+export const fetchSolarStatus = () => get('/api/solar/status');
+export const saveSolarConfig  = (cfg) => post('/api/solar/config', cfg);
+export const setSolarManual   = (kw)  => post('/api/solar/manual', { kw });
+export const clearSolarLimit  = ()    => post('/api/solar/clear', {});
