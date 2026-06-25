@@ -369,6 +369,29 @@ const ACTION_GROUPS = [
   },
 ];
 
+function parseMeterValues(ocppMessages) {
+  const msg = ocppMessages.find(m => m.action === 'MeterValues' && m.direction === 'inbound');
+  if (!msg) return null;
+  const samples = msg.payload?.meterValue?.[0]?.sampledValue || [];
+  const get = (measurand, phase) => {
+    const sv = samples.find(s => s.measurand === measurand && (!phase || s.phase === phase));
+    return sv ? Number(sv.value) : null;
+  };
+  return {
+    ts:     msg.ts,
+    L1A:    get('Current.Import', 'L1'),
+    L2A:    get('Current.Import', 'L2'),
+    L3A:    get('Current.Import', 'L3'),
+    L1V:    get('Voltage', 'L1-N'),
+    L2V:    get('Voltage', 'L2-N'),
+    L3V:    get('Voltage', 'L3-N'),
+    powerW: get('Power.Active.Import'),
+    energyWh: get('Energy.Active.Import.Register'),
+    tempOutlet: samples.find(s => s.measurand === 'Temperature' && s.location === 'Outlet')
+      ? Number(samples.find(s => s.measurand === 'Temperature' && s.location === 'Outlet').value) : null,
+  };
+}
+
 function ControlPage({ ocppCharger, ocppConfig, ocppMessages, onCommand }) {
   const [busy, setBusy]   = useState(null);
   const [logs, setLogs]   = useState({ out: '', err: '' });
@@ -382,6 +405,7 @@ function ControlPage({ ocppCharger, ocppConfig, ocppMessages, onCommand }) {
   }, [showLogs]);
 
   const isOnline = ocppCharger?.connectionState === 'connected';
+  const meter    = parseMeterValues(ocppMessages);
 
   async function fire(key, action, payload) {
     if (busy) return;
@@ -438,6 +462,33 @@ function ControlPage({ ocppCharger, ocppConfig, ocppMessages, onCommand }) {
           </div>
         )}
       </div>
+
+      {meter && (
+        <div>
+          <div className="section-title">
+            Live Meters
+            <span className="meter-ts">{formatTime(meter.ts)}</span>
+          </div>
+          <div className="phase-grid">
+            {['L1','L2','L3'].map(ph => {
+              const a = meter[`${ph}A`];
+              const v = meter[`${ph}V`];
+              return (
+                <div key={ph} className="phase-cell">
+                  <span className="phase-label">{ph}</span>
+                  <span className="phase-val">{a != null ? `${a.toFixed(1)} A` : '—'}</span>
+                  <span className="phase-sub">{v != null ? `${v.toFixed(0)} V` : '—'}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="meter-row-grid">
+            {meter.powerW   != null && <div className="meter-stat"><span>Power</span><strong>{(meter.powerW/1000).toFixed(2)} kW</strong></div>}
+            {meter.energyWh != null && <div className="meter-stat"><span>Energy</span><strong>{(meter.energyWh/1000).toFixed(2)} kWh</strong></div>}
+            {meter.tempOutlet != null && <div className="meter-stat"><span>Temp</span><strong>{meter.tempOutlet.toFixed(1)} °C</strong></div>}
+          </div>
+        </div>
+      )}
 
       {ACTION_GROUPS.map(group => (
         <div key={group.title}>
