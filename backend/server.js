@@ -445,7 +445,7 @@ function buildCarProfilePayload(profile) {
   const base = {
     connectorId: 1,
     csChargingProfiles: {
-      chargingProfileId: 50,  // fixed slot — replaces previous car profile on charger
+      chargingProfileId: 10,  // shared slot for all TxDefaultProfile limits — last applied wins
       stackLevel: 0,
       chargingProfilePurpose: 'TxDefaultProfile',
     },

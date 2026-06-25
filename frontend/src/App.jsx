@@ -395,12 +395,12 @@ const ACTION_GROUPS = [
         payload: {
           connectorId: 1,
           csChargingProfiles: {
-            chargingProfileId: 2, stackLevel: 0,
+            chargingProfileId: 10, stackLevel: 0,
             chargingProfilePurpose: 'TxDefaultProfile',
             chargingProfileKind: 'Relative',
             chargingSchedule: {
               chargingRateUnit: 'W',
-              chargingSchedulePeriod: [{ startPeriod: 0, limit: 11000 }],
+              chargingSchedulePeriod: [{ startPeriod: 0, limit: 11000, numberPhases: 3 }],
             },
           },
         },
@@ -411,12 +411,12 @@ const ACTION_GROUPS = [
         payload: {
           connectorId: 1,
           csChargingProfiles: {
-            chargingProfileId: 2, stackLevel: 0,
+            chargingProfileId: 10, stackLevel: 0,
             chargingProfilePurpose: 'TxDefaultProfile',
             chargingProfileKind: 'Relative',
             chargingSchedule: {
               chargingRateUnit: 'W',
-              chargingSchedulePeriod: [{ startPeriod: 0, limit: 5500 }],
+              chargingSchedulePeriod: [{ startPeriod: 0, limit: 5500, numberPhases: 3 }],
             },
           },
         },
