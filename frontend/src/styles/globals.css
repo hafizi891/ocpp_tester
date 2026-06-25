@@ -943,3 +943,223 @@ body {
   .nav-live-dot.on,
   .status-ring.charging { animation: none; }
 }
+
+/* ── Car Profiles page ───────────────────────────────────────────────────── */
+.profile-add-btn {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--orange);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.profile-offline-note {
+  margin: 0 16px 8px;
+  padding: 10px 14px;
+  background: rgba(0,0,0,0.04);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.profile-empty {
+  text-align: center;
+  padding: 48px 32px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.profile-empty p { margin: 0 0 6px; }
+
+.profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+
+.profile-card {
+  background: var(--card);
+  border-radius: var(--r-card);
+  border-left: 4px solid #ccc;
+  padding: 14px 14px 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  transition: box-shadow 0.2s;
+}
+.profile-card.active {
+  box-shadow: 0 0 0 2px rgba(255,104,44,0.35), 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.profile-card-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.profile-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.profile-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.profile-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--carbon);
+}
+.profile-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.profile-active-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--orange);
+  background: rgba(255,104,44,0.1);
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+
+.profile-card-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.profile-btn {
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.profile-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.profile-btn.edit   { background: var(--chalk); color: var(--carbon); }
+.profile-btn.apply  { background: var(--orange); color: #fff; }
+.profile-btn.delete { background: rgba(192,57,43,0.1); color: var(--red); padding: 6px 10px; }
+
+/* Form overlay */
+.profile-form-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+}
+
+.profile-form {
+  background: var(--card);
+  border-radius: 20px 20px 0 0;
+  padding: 24px 20px calc(24px + env(safe-area-inset-bottom, 0px));
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.profile-form h3 {
+  margin: 0 0 20px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--carbon);
+}
+
+.pf-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.pf-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1.5px solid var(--chalk);
+  border-radius: 10px;
+  font-size: 15px;
+  color: var(--carbon);
+  background: var(--bg);
+  margin-bottom: 16px;
+  outline: none;
+}
+.pf-input:focus { border-color: var(--orange); }
+
+.pf-phases {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.pf-phase-btn {
+  flex: 1;
+  padding: 10px 8px;
+  border: 1.5px solid var(--chalk);
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.pf-phase-btn.selected {
+  border-color: var(--orange);
+  background: rgba(255,104,44,0.08);
+  color: var(--orange);
+  font-weight: 600;
+}
+
+.pf-colors {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.pf-color-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.pf-color-dot.selected {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 3px #fff, 0 0 0 5px currentColor;
+}
+
+.pf-err {
+  color: var(--red);
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+
+.pf-actions {
+  display: flex;
+  gap: 10px;
+}
+.pf-cancel, .pf-save {
+  flex: 1;
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pf-cancel { background: var(--chalk); color: var(--carbon); }
+.pf-save   { background: var(--orange); color: #fff; }

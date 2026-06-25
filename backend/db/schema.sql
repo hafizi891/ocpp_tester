@@ -135,6 +135,17 @@ CREATE TABLE IF NOT EXISTS ocpp_commands (
 CREATE INDEX IF NOT EXISTS idx_commands_cp_status   ON ocpp_commands(charge_point_id, status);
 CREATE INDEX IF NOT EXISTS idx_commands_ocpp_msg_id ON ocpp_commands(ocpp_message_id);
 
+-- ── Car charging profiles (named presets per vehicle) ────────────────────
+CREATE TABLE IF NOT EXISTS car_profiles (
+  id         SERIAL       PRIMARY KEY,
+  name       TEXT         NOT NULL,
+  max_kw     NUMERIC(8,2) NOT NULL,
+  phases     SMALLINT     NOT NULL DEFAULT 3 CHECK (phases IN (1, 3)),
+  color      TEXT         NOT NULL DEFAULT '#6366f1',
+  created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
 -- ── OCPP messages ──────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS ocpp_messages (
   id              TEXT        PRIMARY KEY,

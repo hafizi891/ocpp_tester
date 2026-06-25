@@ -11,6 +11,11 @@ import {
   sendOcppCommand,
   fetchLogs,
   forceCloseSession,
+  fetchCarProfiles,
+  createCarProfile,
+  updateCarProfile,
+  deleteCarProfile,
+  applyCarProfile,
 } from './api';
 import BottomNav from './components/BottomNav';
 import SolarPage from './components/SolarPage';
@@ -561,6 +566,157 @@ function ControlPage({ ocppCharger, ocppConfig, ocppMessages, onCommand }) {
   );
 }
 
+// ── Profiles Page ─────────────────────────────────────────────────────────────
+
+const PROFILE_COLORS = ['#ef4444','#f97316','#22c55e','#3b82f6','#8b5cf6'];
+
+const BLANK_FORM = { name: '', maxKw: '', phases: 3, color: '#3b82f6' };
+
+function ProfilesPage({ ocppCharger }) {
+  const [profiles, setProfiles]     = useState([]);
+  const [form, setForm]             = useState(null);   // null = closed; object = open
+  const [editId, setEditId]         = useState(null);
+  const [applying, setApplying]     = useState(null);
+  const [activeId, setActiveId]     = useState(null);
+  const [err, setErr]               = useState('');
+
+  useEffect(() => {
+    fetchCarProfiles().then(setProfiles).catch(() => {});
+  }, []);
+
+  function openNew() { setForm({ ...BLANK_FORM }); setEditId(null); setErr(''); }
+  function openEdit(p) {
+    setForm({ name: p.name, maxKw: String(p.maxKw), phases: p.phases, color: p.color });
+    setEditId(p.id);
+    setErr('');
+  }
+  function closeForm() { setForm(null); setEditId(null); setErr(''); }
+
+  async function saveForm() {
+    const maxKw = parseFloat(form.maxKw);
+    if (!form.name.trim()) return setErr('Name is required');
+    if (!maxKw || maxKw <= 0) return setErr('Enter a valid max power (kW)');
+    try {
+      if (editId) {
+        const updated = await updateCarProfile(editId, { ...form, maxKw });
+        setProfiles(ps => ps.map(p => p.id === editId ? updated : p));
+      } else {
+        const created = await createCarProfile({ ...form, maxKw });
+        setProfiles(ps => [...ps, created]);
+      }
+      closeForm();
+    } catch (e) { setErr(e.message); }
+  }
+
+  async function handleDelete(id) {
+    await deleteCarProfile(id).catch(() => {});
+    setProfiles(ps => ps.filter(p => p.id !== id));
+    if (activeId === id) setActiveId(null);
+  }
+
+  async function handleApply(p) {
+    if (!ocppCharger?.connectionState === 'connected') return;
+    setApplying(p.id);
+    try {
+      await applyCarProfile(p.id);
+      setActiveId(p.id);
+    } catch (_) {}
+    setApplying(null);
+  }
+
+  const isOnline = ocppCharger?.connectionState === 'connected';
+
+  return (
+    <div className="page">
+      <header className="app-header">
+        <span className="brand">Car Profiles</span>
+        <button className="profile-add-btn" onClick={openNew}>+ New</button>
+      </header>
+
+      {!isOnline && (
+        <div className="profile-offline-note">Charger offline — profiles saved but cannot be applied</div>
+      )}
+
+      {profiles.length === 0 && !form && (
+        <div className="profile-empty">
+          <p>No profiles yet.</p>
+          <p>Create a profile for each car to quickly set the right charging limit.</p>
+        </div>
+      )}
+
+      <div className="profile-list">
+        {profiles.map(p => (
+          <div key={p.id} className={`profile-card ${activeId === p.id ? 'active' : ''}`}
+               style={{ borderLeftColor: p.color }}>
+            <div className="profile-card-body">
+              <span className="profile-dot" style={{ background: p.color }} />
+              <div className="profile-info">
+                <span className="profile-name">{p.name}</span>
+                <span className="profile-sub">
+                  {p.maxKw} kW &middot; {p.phases}-phase
+                </span>
+              </div>
+              {activeId === p.id && <span className="profile-active-badge">Active</span>}
+            </div>
+            <div className="profile-card-actions">
+              <button className="profile-btn edit"   onClick={() => openEdit(p)}>Edit</button>
+              <button className="profile-btn apply"  onClick={() => handleApply(p)}
+                      disabled={applying === p.id || !isOnline}>
+                {applying === p.id ? '…' : 'Apply'}
+              </button>
+              <button className="profile-btn delete" onClick={() => handleDelete(p.id)}>✕</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {form && (
+        <div className="profile-form-overlay" onClick={closeForm}>
+          <div className="profile-form" onClick={e => e.stopPropagation()}>
+            <h3>{editId ? 'Edit Profile' : 'New Profile'}</h3>
+
+            <label className="pf-label">Car name</label>
+            <input className="pf-input" placeholder="e.g. Tesla Model 3"
+              value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+
+            <label className="pf-label">Max power (kW)</label>
+            <input className="pf-input" type="number" min="0.1" max="22" step="0.5"
+              placeholder="e.g. 11"
+              value={form.maxKw} onChange={e => setForm(f => ({ ...f, maxKw: e.target.value }))} />
+
+            <label className="pf-label">Phases</label>
+            <div className="pf-phases">
+              {[1, 3].map(n => (
+                <button key={n}
+                  className={`pf-phase-btn ${form.phases === n ? 'selected' : ''}`}
+                  onClick={() => setForm(f => ({ ...f, phases: n }))}>
+                  {n}-phase {n === 1 ? '(~7.4kW max)' : '(~22kW max)'}
+                </button>
+              ))}
+            </div>
+
+            <label className="pf-label">Color</label>
+            <div className="pf-colors">
+              {PROFILE_COLORS.map(c => (
+                <button key={c} className={`pf-color-dot ${form.color === c ? 'selected' : ''}`}
+                  style={{ background: c }}
+                  onClick={() => setForm(f => ({ ...f, color: c }))} />
+              ))}
+            </div>
+
+            {err && <p className="pf-err">{err}</p>}
+
+            <div className="pf-actions">
+              <button className="pf-cancel" onClick={closeForm}>Cancel</button>
+              <button className="pf-save"   onClick={saveForm}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -687,10 +843,11 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      {tab === 'home'    && <HomePage    {...shared} />}
-      {tab === 'history' && <HistoryPage sessions={sessions} />}
-      {tab === 'solar'   && <SolarPage   maxKw={charger?.maxKw || ocppCharger?.maxKw} />}
-      {tab === 'control' && (
+      {tab === 'home'     && <HomePage    {...shared} />}
+      {tab === 'history'  && <HistoryPage sessions={sessions} />}
+      {tab === 'profiles' && <ProfilesPage ocppCharger={ocppCharger} />}
+      {tab === 'solar'    && <SolarPage   maxKw={charger?.maxKw || ocppCharger?.maxKw} />}
+      {tab === 'control'  && (
         <ControlPage
           ocppCharger={ocppCharger}
           ocppConfig={ocppConfig}

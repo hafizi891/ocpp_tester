@@ -1,9 +1,10 @@
 export default function BottomNav({ active, onChange, connected }) {
   const tabs = [
-    { id: 'home',    label: 'Home',    icon: '⚡' },
-    { id: 'history', label: 'History', icon: '📋' },
-    { id: 'solar',   label: 'Solar',   icon: '☀️' },
-    { id: 'control', label: 'Control', icon: '⚙️' },
+    { id: 'home',     label: 'Home',     icon: '⚡' },
+    { id: 'history',  label: 'History',  icon: '📋' },
+    { id: 'profiles', label: 'Profiles', icon: '🚗' },
+    { id: 'solar',    label: 'Solar',    icon: '☀️' },
+    { id: 'control',  label: 'Control',  icon: '⚙️' },
   ];
 
   return (

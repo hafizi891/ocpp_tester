@@ -152,6 +152,60 @@ app.delete('/api/id-tags/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── REST API — Car profiles ───────────────────────────────────────────────
+
+app.get('/api/car-profiles', async (_req, res) => {
+  const profiles = await queries.listCarProfiles(pool).catch(() => []);
+  res.json(profiles);
+});
+
+app.post('/api/car-profiles', async (req, res) => {
+  const { name, maxKw, phases, color } = req.body || {};
+  if (!name || !maxKw) return res.status(400).json({ error: 'name and maxKw required' });
+  const profile = await queries.insertCarProfile(pool, { name, maxKw: Number(maxKw), phases: Number(phases) || 3, color });
+  res.status(201).json(profile);
+});
+
+app.put('/api/car-profiles/:id', async (req, res) => {
+  const { name, maxKw, phases, color } = req.body || {};
+  if (!name || !maxKw) return res.status(400).json({ error: 'name and maxKw required' });
+  const profile = await queries.updateCarProfile(pool, Number(req.params.id), { name, maxKw: Number(maxKw), phases: Number(phases) || 3, color });
+  if (!profile) return res.status(404).json({ error: 'Not found' });
+  res.json(profile);
+});
+
+app.delete('/api/car-profiles/:id', async (req, res) => {
+  await queries.deleteCarProfile(pool, Number(req.params.id));
+  res.json({ ok: true });
+});
+
+app.post('/api/car-profiles/:id/apply', async (req, res) => {
+  const profile = await queries.getCarProfile(pool, Number(req.params.id));
+  if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+  const charger = chargers[0];
+  if (!charger) return res.status(503).json({ error: 'No charger connected' });
+
+  const limitW = Math.round(profile.maxKw * 1000);
+  const payload = {
+    connectorId: 1,
+    csChargingProfiles: {
+      chargingProfileId: 50,   // fixed slot — applying a new profile replaces the old one
+      stackLevel: 0,
+      chargingProfilePurpose: 'TxDefaultProfile',
+      chargingProfileKind: 'Relative',
+      chargingSchedule: {
+        chargingRateUnit: 'W',
+        chargingSchedulePeriod: [{ startPeriod: 0, limit: limitW, numberPhases: profile.phases }],
+      },
+    },
+  };
+
+  const cmd = createOcppCommand(charger.ocppIdentity, 'SetChargingProfile', payload);
+  deliverCommand(cmd);
+  res.json({ ok: true, commandId: cmd.id });
+});
+
 // ── REST API — OCPP ───────────────────────────────────────────────────────
 app.get('/api/ocpp/config', (_req, res) => {
   res.json({

@@ -302,6 +302,53 @@ async function clearChargingProfiles(pool, chargerId, { id, connectorId, purpose
   await pool.query(q, params);
 }
 
+// ── Car profiles ──────────────────────────────────────────────────────────
+
+function rowToCarProfile(row) {
+  return {
+    id:     row.id,
+    name:   row.name,
+    maxKw:  Number(row.max_kw),
+    phases: Number(row.phases),
+    color:  row.color,
+  };
+}
+
+async function listCarProfiles(pool) {
+  const { rows } = await pool.query('SELECT * FROM car_profiles ORDER BY id');
+  return rows.map(rowToCarProfile);
+}
+
+async function insertCarProfile(pool, p) {
+  const { rows: [row] } = await pool.query(
+    `INSERT INTO car_profiles (name, max_kw, phases, color)
+     VALUES ($1,$2,$3,$4) RETURNING *`,
+    [p.name, p.maxKw, p.phases ?? 3, p.color ?? '#6366f1']
+  );
+  return rowToCarProfile(row);
+}
+
+async function updateCarProfile(pool, id, p) {
+  const { rows: [row] } = await pool.query(
+    `UPDATE car_profiles
+     SET name = $2, max_kw = $3, phases = $4, color = $5, updated_at = NOW()
+     WHERE id = $1 RETURNING *`,
+    [id, p.name, p.maxKw, p.phases ?? 3, p.color ?? '#6366f1']
+  );
+  return row ? rowToCarProfile(row) : null;
+}
+
+async function deleteCarProfile(pool, id) {
+  await pool.query('DELETE FROM car_profiles WHERE id = $1', [id]);
+}
+
+async function getCarProfile(pool, id) {
+  const { rows: [row] } = await pool.query(
+    'SELECT * FROM car_profiles WHERE id = $1', [id]
+  );
+  return row ? rowToCarProfile(row) : null;
+}
+
 // ── OCPP commands ─────────────────────────────────────────────────────────
 
 async function insertOcppCommand(pool, cmd) {
@@ -371,8 +418,10 @@ module.exports = {
   upsertReservation, cancelReservation,
   // event log
   logOcppEvent,
-  // charging profiles
+  // charging profiles (OCPP)
   upsertChargingProfile, clearChargingProfiles,
+  // car profiles
+  listCarProfiles, insertCarProfile, updateCarProfile, deleteCarProfile, getCarProfile,
   // commands
   insertOcppCommand, markOcppCommandSent, markOcppCommandResult,
   // messages

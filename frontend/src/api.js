@@ -32,6 +32,12 @@ export const sendOcppCommand = (chargePointId, action, payload) => (
 
 export const forceCloseSession = (id) => post(`/api/sessions/${id}/force-close`, {});
 
+export const fetchCarProfiles  = () => get('/api/car-profiles');
+export const createCarProfile  = (p) => post('/api/car-profiles', p);
+export const updateCarProfile  = (id, p) => request(`/api/car-profiles/${id}`, { method: 'PUT', body: JSON.stringify(p) });
+export const deleteCarProfile  = (id) => request(`/api/car-profiles/${id}`, { method: 'DELETE' });
+export const applyCarProfile   = (id) => post(`/api/car-profiles/${id}/apply`, {});
+
 export const fetchLogs = (lines = 80) => get(`/api/logs?lines=${lines}`);
 export const fetchSolarConfig = () => get('/api/solar/config');
 export const fetchSolarStatus = () => get('/api/solar/status');
