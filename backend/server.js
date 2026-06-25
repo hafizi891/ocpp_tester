@@ -23,6 +23,7 @@ const cors                = require('cors');
 const pool    = require('./db/pool');
 const queries = require('./db/queries');
 const solar   = require('./solar');
+const bridge  = require('./cloud-bridge');
 
 // ── Configuration ─────────────────────────────────────────────────────────
 const FRONTEND_ORIGIN         = process.env.FRONTEND_ORIGIN         || 'http://localhost:5173';
@@ -329,6 +330,14 @@ async function main() {
     }
   });
 
+  // Initialise cloud bridge (no-op if MQTT_URL not set)
+  bridge.init((action, payload) => {
+    const charger = chargers[0];
+    if (!charger) return;
+    const cmd = createOcppCommand(charger.ocppIdentity, action, payload);
+    deliverCommand(cmd);
+  });
+
   server.listen(PORT, () => {
     const maskedDb = (process.env.DATABASE_URL || '').replace(/:[^:@]+@/, ':****@');
     console.log(`\nCPMS backend  -> http://localhost:${PORT}`);
@@ -416,6 +425,10 @@ async function handleOcppCall(ocppIdentity, ws, uniqueId, action, payload) {
   ws.send(JSON.stringify([3, uniqueId, response]));
   logOcppMessage(ocppIdentity, 'outbound', `${action}.conf`, response);
   publishOcppState();
+
+  if (action === 'BootNotification' && response.status === 'Accepted') {
+    bridge.publishBoot(ocppIdentity, payload);
+  }
 
   // After BootNotification: restore saved charging profiles (charger loses them on reboot)
   if (action === 'BootNotification' && response.status === 'Accepted') {
@@ -568,6 +581,13 @@ async function applyOcppDomainEvent(charger, action, payload) {
     const status = raw.includes('fault') ? 'fault' : raw.includes('charging') ? 'active' : 'idle';
     charger.status = status;
     await queries.updateChargerStatus(pool, charger.id, status);
+
+    const conn = ocppConnections.get(charger.ocppIdentity);
+    bridge.publishChargerStatus(charger, conn?.state || 'connected');
+
+    if (status === 'fault') {
+      bridge.publishFault(charger.id, payload.errorCode || 'GenericError', payload.info || '');
+    }
   }
 
   if (action === 'MeterValues') {
@@ -588,6 +608,9 @@ async function applyOcppDomainEvent(charger, action, payload) {
       kw = Math.min(charger.maxKw, Math.max(0, Math.round(kw * 10) / 10));
       charger.kw = kw;
       await queries.updateChargerKw(pool, charger.id, kw);
+
+      const meterData = { kw, samples: samples.map(s => ({ measurand: s.measurand, phase: s.phase, value: s.value, unit: s.unit })) };
+      bridge.publishMeter(charger.id, meterData);
     }
   }
 
@@ -632,6 +655,7 @@ async function handleStartTransaction(payload, ocppIdentity, charger) {
       charger.kw     = 0;
       await queries.updateChargerStatus(pool, charger.id, 'active');
 
+      bridge.publishSessionStarted(newSession);
       io.emit('sessions:update', sessions);
     } catch (err) {
       console.error('StartTransaction DB error:', err.message);
@@ -671,6 +695,8 @@ async function handleStopTransaction(payload) {
       status: 'completed', energyKwh, amount,
       meterStop: meterStop ?? null, stopReason: reason,
     });
+
+    bridge.publishSessionStopped(session);
 
     const charger = findCharger(session.chargerId);
     if (charger) {
@@ -733,7 +759,11 @@ async function registerOcppConnection(ocppIdentity, ws, options = {}) {
 
   publishOcppState();
   setLed(true);
-  if (!options.anonymous) flushPendingCommands(ocppIdentity);
+  if (!options.anonymous) {
+    const charger = findCharger(ocppIdentity);
+    if (charger) bridge.publishChargerStatus(charger, 'connected');
+    flushPendingCommands(ocppIdentity);
+  }
 }
 
 function markOcppDisconnected(ocppIdentity) {
@@ -743,6 +773,8 @@ function markOcppDisconnected(ocppIdentity) {
   }
   logOcppMessage(ocppIdentity, 'system', 'WebSocketClose', {});
   publishOcppState();
+  const chargerDc = findCharger(ocppIdentity);
+  if (chargerDc) bridge.publishChargerStatus(chargerDc, 'disconnected');
   const anyConnected = [...ocppConnections.values()].some(c => c.state === 'connected');
   setLed(anyConnected);
 }
