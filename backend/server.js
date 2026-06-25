@@ -339,10 +339,10 @@ async function main() {
   });
 
   server.listen(PORT, () => {
-    const maskedDb = (process.env.DATABASE_URL || '').replace(/:[^:@]+@/, ':****@');
+    const dbPath = process.env.SQLITE_PATH || require('path').join(__dirname, 'data', 'cpms.db');
     console.log(`\nCPMS backend  -> http://localhost:${PORT}`);
     console.log(`OCPP endpoint -> ${process.env.OCPP_WS_ENDPOINT || '(set OCPP_WS_ENDPOINT)'}`);
-    console.log(`Database      -> ${maskedDb || '(missing DATABASE_URL)'}`);
+    console.log(`Database      -> SQLite  ${dbPath}`);
     console.log(`Open auth     -> ${OCPP_OPEN_AUTH ? 'ON (all RFID accepted)' : 'OFF (whitelist only)'}\n`);
   });
 
