@@ -66,6 +66,12 @@ let ocppMessages = [];
 let ocppCommands = [];
 const ocppConnections = new Map();
 
+// Tracks last user-applied charging profile per purpose so they can be
+// restored after a charger reboot (charger keeps profiles in RAM only).
+// Key: chargingProfilePurpose ('ChargePointMaxProfile', 'TxDefaultProfile', …)
+// Value: the full SetChargingProfile payload to re-send, or null if cleared.
+const savedProfiles = new Map();
+
 // ── Express middleware ────────────────────────────────────────────────────
 app.use(cors({ origin: FRONTEND_ORIGIN }));
 app.use(express.json());
@@ -367,35 +373,49 @@ async function handleOcppCall(ocppIdentity, ws, uniqueId, action, payload) {
   logOcppMessage(ocppIdentity, 'outbound', `${action}.conf`, response);
   publishOcppState();
 
-  // After BootNotification: restore ChargePointMaxProfile (charger loses it on reboot)
+  // After BootNotification: restore saved charging profiles (charger loses them on reboot)
   if (action === 'BootNotification' && response.status === 'Accepted') {
-    setTimeout(() => applyDefaultMaxProfile(ocppIdentity), 2000);
-    // After profile is applied, refresh composite schedule so the UI shows the correct limit
+    setTimeout(() => restoreProfilesOnBoot(ocppIdentity), 2000);
+    // After profiles are applied, refresh composite schedule so the UI shows the correct limit
     setTimeout(() => {
       const cmd = createOcppCommand(ocppIdentity, 'GetCompositeSchedule', {
         connectorId: 1, duration: 86400,
       });
+      cmd._auto = true;
       deliverCommand(cmd);
     }, 5000);
   }
 }
 
-function applyDefaultMaxProfile(ocppIdentity) {
-  const cmd = createOcppCommand(ocppIdentity, 'SetChargingProfile', {
-    connectorId: 0,
-    csChargingProfiles: {
-      chargingProfileId: 1,
-      stackLevel:        0,
-      chargingProfilePurpose: 'ChargePointMaxProfile',
-      chargingProfileKind:    'Absolute',
-      chargingSchedule: {
-        chargingRateUnit: 'A',
-        chargingSchedulePeriod: [{ startPeriod: 0, limit: 32, numberPhases: 3 }],
-      },
+const DEFAULT_MAX_PROFILE_PAYLOAD = {
+  connectorId: 0,
+  csChargingProfiles: {
+    chargingProfileId: 1, stackLevel: 0,
+    chargingProfilePurpose: 'ChargePointMaxProfile',
+    chargingProfileKind: 'Absolute',
+    chargingSchedule: {
+      chargingRateUnit: 'A',
+      chargingSchedulePeriod: [{ startPeriod: 0, limit: 32, numberPhases: 3 }],
     },
-  });
-  deliverCommand(cmd);
-  console.log(`[${ocppIdentity}] Auto-applied ChargePointMaxProfile 3-phase 32A on boot`);
+  },
+};
+
+function restoreProfilesOnBoot(ocppIdentity) {
+  // Restore ChargePointMaxProfile — use what the user last set, or the hardware default
+  const maxPayload = savedProfiles.get('ChargePointMaxProfile') ?? DEFAULT_MAX_PROFILE_PAYLOAD;
+  const maxCmd = createOcppCommand(ocppIdentity, 'SetChargingProfile', maxPayload);
+  maxCmd._auto = true;
+  deliverCommand(maxCmd);
+  console.log(`[${ocppIdentity}] Boot restore: ChargePointMaxProfile`);
+
+  // Restore any user-set TxDefaultProfile (50% / 25% limit)
+  const txPayload = savedProfiles.get('TxDefaultProfile');
+  if (txPayload) {
+    const txCmd = createOcppCommand(ocppIdentity, 'SetChargingProfile', txPayload);
+    txCmd._auto = true;
+    deliverCommand(txCmd);
+    console.log(`[${ocppIdentity}] Boot restore: TxDefaultProfile`);
+  }
 }
 
 // ── OCPP response builder (async — handles all 10 inbound message types) ──
@@ -717,6 +737,12 @@ async function handleCommandResultSideEffects(command, ocppIdentity) {
   if (command.action === 'SetChargingProfile' && command.response?.status === 'Accepted' && charger) {
     await queries.upsertChargingProfile(pool, charger.id, command.payload.connectorId, command.payload.csChargingProfiles)
       .catch(err => console.error('upsertChargingProfile:', err.message));
+
+    // Remember user-applied profiles for boot restore (ignore auto-applied ones)
+    if (!command._auto) {
+      const purpose = command.payload?.csChargingProfiles?.chargingProfilePurpose;
+      if (purpose) savedProfiles.set(purpose, command.payload);
+    }
   }
 
   if (command.action === 'ClearChargingProfile' && command.response?.status === 'Accepted' && charger) {
@@ -727,6 +753,11 @@ async function handleCommandResultSideEffects(command, ocppIdentity) {
       purpose:     p.chargingProfilePurpose,
       stackLevel:  p.stackLevel,
     }).catch(err => console.error('clearChargingProfiles:', err.message));
+
+    // ClearChargingProfile with empty payload clears all profiles — reset saved state
+    if (!command._auto && Object.keys(p).length === 0) {
+      savedProfiles.clear();
+    }
   }
 }
 
