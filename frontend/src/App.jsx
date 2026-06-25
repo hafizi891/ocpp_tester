@@ -567,23 +567,54 @@ export default function App() {
   const ocppCharger   = ocppChargePoints[0];
   const activeSession = sessions.find(s => s.status === 'charging');
 
-  // Derive current charging limit from most recent accepted profile command
+  // Auto-query composite schedule whenever charger comes online
+  useEffect(() => {
+    if (ocppCharger?.connectionState === 'connected' && ocppCharger?.ocppIdentity) {
+      sendOcppCommand(ocppCharger.ocppIdentity, 'GetCompositeSchedule',
+        { connectorId: 1, duration: 86400 }).catch(() => {});
+    }
+  }, [ocppCharger?.connectionState, ocppCharger?.ocppIdentity]);
+
+  // Derive current charging limit — prefer GetCompositeSchedule (real charger state),
+  // fall back to most recent SetChargingProfile/ClearChargingProfile command
   function activeChargeLimit() {
-    const cmds = [...ocppCommands]
-      .filter(c => (c.action === 'SetChargingProfile' || c.action === 'ClearChargingProfile')
-                && c.status === 'accepted' && c.response?.status === 'Accepted')
-      .sort((a, b) => new Date(b.responseAt) - new Date(a.responseAt));
-    if (!cmds.length) return null;
-    const latest = cmds[0];
-    if (latest.action === 'ClearChargingProfile') return { label: 'No limit', kw: null };
-    const schedule = latest.payload?.csChargingProfiles?.chargingSchedule;
-    const period   = schedule?.chargingSchedulePeriod?.[0];
-    if (!period) return null;
-    const phases = period.numberPhases || 3;
-    const kw = schedule.chargingRateUnit === 'W'
-      ? period.limit / 1000
-      : (period.limit * phases * 230) / 1000;
-    return { label: `${kw.toFixed(1)} kW`, kw };
+    const accepted = c => c.status === 'accepted' && c.response?.status === 'Accepted';
+    const byTime   = (a, b) => new Date(b.responseAt) - new Date(a.responseAt);
+
+    const scheduleCmd = [...ocppCommands]
+      .filter(c => c.action === 'GetCompositeSchedule' && accepted(c))
+      .sort(byTime)[0];
+
+    const profileCmd = [...ocppCommands]
+      .filter(c => (c.action === 'SetChargingProfile' || c.action === 'ClearChargingProfile') && accepted(c))
+      .sort(byTime)[0];
+
+    // Use whichever result is more recent
+    const useSchedule = scheduleCmd && (!profileCmd ||
+      new Date(scheduleCmd.responseAt) >= new Date(profileCmd.responseAt));
+
+    if (useSchedule) {
+      const period = scheduleCmd.response?.chargingSchedule?.chargingSchedulePeriod?.[0];
+      const unit   = scheduleCmd.response?.chargingSchedule?.chargingRateUnit;
+      if (!period) return null;
+      const phases = period.numberPhases || 3;
+      const kw = unit === 'W' ? period.limit / 1000 : (period.limit * phases * 230) / 1000;
+      return { label: `${kw.toFixed(1)} kW`, kw };
+    }
+
+    if (profileCmd) {
+      if (profileCmd.action === 'ClearChargingProfile') return { label: 'No limit', kw: null };
+      const schedule = profileCmd.payload?.csChargingProfiles?.chargingSchedule;
+      const period   = schedule?.chargingSchedulePeriod?.[0];
+      if (!period) return null;
+      const phases = period.numberPhases || 3;
+      const kw = schedule.chargingRateUnit === 'W'
+        ? period.limit / 1000
+        : (period.limit * phases * 230) / 1000;
+      return { label: `${kw.toFixed(1)} kW`, kw };
+    }
+
+    return null;
   }
 
   const chargeLimit = activeChargeLimit();
