@@ -370,6 +370,13 @@ async function handleOcppCall(ocppIdentity, ws, uniqueId, action, payload) {
   // After BootNotification: restore ChargePointMaxProfile (charger loses it on reboot)
   if (action === 'BootNotification' && response.status === 'Accepted') {
     setTimeout(() => applyDefaultMaxProfile(ocppIdentity), 2000);
+    // After profile is applied, refresh composite schedule so the UI shows the correct limit
+    setTimeout(() => {
+      const cmd = createOcppCommand(ocppIdentity, 'GetCompositeSchedule', {
+        connectorId: 1, duration: 86400,
+      });
+      deliverCommand(cmd);
+    }, 5000);
   }
 }
 
