@@ -306,11 +306,12 @@ async function clearChargingProfiles(pool, chargerId, { id, connectorId, purpose
 
 function rowToCarProfile(row) {
   return {
-    id:     row.id,
-    name:   row.name,
-    maxKw:  Number(row.max_kw),
-    phases: Number(row.phases),
-    color:  row.color,
+    id:       row.id,
+    name:     row.name,
+    maxKw:    Number(row.max_kw),
+    phases:   Number(row.phases),
+    color:    row.color,
+    schedule: row.schedule ?? { type: 'always' },
   };
 }
 
@@ -321,9 +322,10 @@ async function listCarProfiles(pool) {
 
 async function insertCarProfile(pool, p) {
   const { rows: [row] } = await pool.query(
-    `INSERT INTO car_profiles (name, max_kw, phases, color)
-     VALUES ($1,$2,$3,$4) RETURNING *`,
-    [p.name, p.maxKw, p.phases ?? 3, p.color ?? '#6366f1']
+    `INSERT INTO car_profiles (name, max_kw, phases, color, schedule)
+     VALUES ($1,$2,$3,$4,$5::jsonb) RETURNING *`,
+    [p.name, p.maxKw, p.phases ?? 3, p.color ?? '#6366f1',
+     JSON.stringify(p.schedule ?? { type: 'always' })]
   );
   return rowToCarProfile(row);
 }
@@ -331,9 +333,10 @@ async function insertCarProfile(pool, p) {
 async function updateCarProfile(pool, id, p) {
   const { rows: [row] } = await pool.query(
     `UPDATE car_profiles
-     SET name = $2, max_kw = $3, phases = $4, color = $5, updated_at = NOW()
+     SET name = $2, max_kw = $3, phases = $4, color = $5, schedule = $6::jsonb, updated_at = NOW()
      WHERE id = $1 RETURNING *`,
-    [id, p.name, p.maxKw, p.phases ?? 3, p.color ?? '#6366f1']
+    [id, p.name, p.maxKw, p.phases ?? 3, p.color ?? '#6366f1',
+     JSON.stringify(p.schedule ?? { type: 'always' })]
   );
   return row ? rowToCarProfile(row) : null;
 }

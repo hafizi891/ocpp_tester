@@ -142,9 +142,12 @@ CREATE TABLE IF NOT EXISTS car_profiles (
   max_kw     NUMERIC(8,2) NOT NULL,
   phases     SMALLINT     NOT NULL DEFAULT 3 CHECK (phases IN (1, 3)),
   color      TEXT         NOT NULL DEFAULT '#6366f1',
+  schedule   JSONB        NOT NULL DEFAULT '{"type":"always"}',
   created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE car_profiles ADD COLUMN IF NOT EXISTS schedule JSONB NOT NULL DEFAULT '{"type":"always"}';
 
 -- ── OCPP messages ──────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS ocpp_messages (

@@ -1124,6 +1124,14 @@ body {
   font-weight: 600;
 }
 
+.pf-time-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.pf-time-field { flex: 1; }
+.pf-time-field .pf-input { margin-bottom: 0; }
+
 .pf-colors {
   display: flex;
   gap: 12px;

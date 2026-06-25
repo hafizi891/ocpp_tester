@@ -160,16 +160,20 @@ app.get('/api/car-profiles', async (_req, res) => {
 });
 
 app.post('/api/car-profiles', async (req, res) => {
-  const { name, maxKw, phases, color } = req.body || {};
+  const { name, maxKw, phases, color, schedule } = req.body || {};
   if (!name || !maxKw) return res.status(400).json({ error: 'name and maxKw required' });
-  const profile = await queries.insertCarProfile(pool, { name, maxKw: Number(maxKw), phases: Number(phases) || 3, color });
+  const profile = await queries.insertCarProfile(pool, {
+    name, maxKw: Number(maxKw), phases: Number(phases) || 3, color, schedule,
+  });
   res.status(201).json(profile);
 });
 
 app.put('/api/car-profiles/:id', async (req, res) => {
-  const { name, maxKw, phases, color } = req.body || {};
+  const { name, maxKw, phases, color, schedule } = req.body || {};
   if (!name || !maxKw) return res.status(400).json({ error: 'name and maxKw required' });
-  const profile = await queries.updateCarProfile(pool, Number(req.params.id), { name, maxKw: Number(maxKw), phases: Number(phases) || 3, color });
+  const profile = await queries.updateCarProfile(pool, Number(req.params.id), {
+    name, maxKw: Number(maxKw), phases: Number(phases) || 3, color, schedule,
+  });
   if (!profile) return res.status(404).json({ error: 'Not found' });
   res.json(profile);
 });
@@ -186,21 +190,7 @@ app.post('/api/car-profiles/:id/apply', async (req, res) => {
   const charger = chargers[0];
   if (!charger) return res.status(503).json({ error: 'No charger connected' });
 
-  const limitW = Math.round(profile.maxKw * 1000);
-  const payload = {
-    connectorId: 1,
-    csChargingProfiles: {
-      chargingProfileId: 50,   // fixed slot — applying a new profile replaces the old one
-      stackLevel: 0,
-      chargingProfilePurpose: 'TxDefaultProfile',
-      chargingProfileKind: 'Relative',
-      chargingSchedule: {
-        chargingRateUnit: 'W',
-        chargingSchedulePeriod: [{ startPeriod: 0, limit: limitW, numberPhases: profile.phases }],
-      },
-    },
-  };
-
+  const payload = buildCarProfilePayload(profile);
   const cmd = createOcppCommand(charger.ocppIdentity, 'SetChargingProfile', payload);
   deliverCommand(cmd);
   res.json({ ok: true, commandId: cmd.id });
@@ -439,6 +429,79 @@ async function handleOcppCall(ocppIdentity, ws, uniqueId, action, payload) {
       deliverCommand(cmd);
     }, 5000);
   }
+}
+
+// Convert "HH:MM" string → seconds from midnight
+function timeToSec(hhmm) {
+  const [h, m] = String(hhmm).split(':').map(Number);
+  return (h || 0) * 3600 + (m || 0) * 60;
+}
+
+function buildCarProfilePayload(profile) {
+  const limitW   = Math.round(profile.maxKw * 1000);
+  const phases   = profile.phases || 3;
+  const schedule = profile.schedule || { type: 'always' };
+
+  const base = {
+    connectorId: 1,
+    csChargingProfiles: {
+      chargingProfileId: 50,  // fixed slot — replaces previous car profile on charger
+      stackLevel: 0,
+      chargingProfilePurpose: 'TxDefaultProfile',
+    },
+  };
+
+  if (schedule.type === 'daily') {
+    const startSec = timeToSec(schedule.start || '00:00');
+    const endSec   = timeToSec(schedule.end   || '00:00');
+    // Build periods. For an overnight window (e.g. 23:00–07:00), startSec > endSec.
+    let periods;
+    if (startSec > endSec) {
+      // Crosses midnight: active from midnight→end and startSec→midnight
+      periods = [
+        { startPeriod: 0,        limit: limitW, numberPhases: phases },
+        { startPeriod: endSec,   limit: 0 },
+        { startPeriod: startSec, limit: limitW, numberPhases: phases },
+      ];
+    } else {
+      // Same-day window: off until startSec, on until endSec, then off
+      periods = [
+        { startPeriod: 0,        limit: 0 },
+        { startPeriod: startSec, limit: limitW, numberPhases: phases },
+        { startPeriod: endSec,   limit: 0 },
+      ];
+    }
+    const midnight = new Date();
+    midnight.setUTCHours(0, 0, 0, 0);
+    base.csChargingProfiles.chargingProfileKind = 'Recurring';
+    base.csChargingProfiles.recurrencyKind      = 'Daily';
+    base.csChargingProfiles.chargingSchedule    = {
+      startSchedule:          midnight.toISOString(),
+      chargingRateUnit:       'W',
+      chargingSchedulePeriod: periods,
+    };
+    return base;
+  }
+
+  if (schedule.type === 'once') {
+    base.csChargingProfiles.chargingProfileKind = 'Absolute';
+    base.csChargingProfiles.validFrom           = schedule.from;
+    base.csChargingProfiles.validTo             = schedule.to;
+    base.csChargingProfiles.chargingSchedule    = {
+      startSchedule:          schedule.from,
+      chargingRateUnit:       'W',
+      chargingSchedulePeriod: [{ startPeriod: 0, limit: limitW, numberPhases: phases }],
+    };
+    return base;
+  }
+
+  // 'always' — simple Relative profile, no time restriction
+  base.csChargingProfiles.chargingProfileKind = 'Relative';
+  base.csChargingProfiles.chargingSchedule    = {
+    chargingRateUnit:       'W',
+    chargingSchedulePeriod: [{ startPeriod: 0, limit: limitW, numberPhases: phases }],
+  };
+  return base;
 }
 
 function restoreProfilesOnBoot(ocppIdentity) {

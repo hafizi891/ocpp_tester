@@ -570,7 +570,7 @@ function ControlPage({ ocppCharger, ocppConfig, ocppMessages, onCommand }) {
 
 const PROFILE_COLORS = ['#ef4444','#f97316','#22c55e','#3b82f6','#8b5cf6'];
 
-const BLANK_FORM = { name: '', maxKw: '', phases: 3, color: '#3b82f6' };
+const BLANK_FORM = { name: '', maxKw: '', phases: 3, color: '#3b82f6', schedule: { type: 'always' } };
 
 function ProfilesPage({ ocppCharger }) {
   const [profiles, setProfiles]     = useState([]);
@@ -586,9 +586,13 @@ function ProfilesPage({ ocppCharger }) {
 
   function openNew() { setForm({ ...BLANK_FORM }); setEditId(null); setErr(''); }
   function openEdit(p) {
-    setForm({ name: p.name, maxKw: String(p.maxKw), phases: p.phases, color: p.color });
+    setForm({ name: p.name, maxKw: String(p.maxKw), phases: p.phases, color: p.color, schedule: p.schedule || { type: 'always' } });
     setEditId(p.id);
     setErr('');
+  }
+
+  function setSchedule(patch) {
+    setForm(f => ({ ...f, schedule: { ...f.schedule, ...patch } }));
   }
   function closeForm() { setForm(null); setEditId(null); setErr(''); }
 
@@ -596,16 +600,31 @@ function ProfilesPage({ ocppCharger }) {
     const maxKw = parseFloat(form.maxKw);
     if (!form.name.trim()) return setErr('Name is required');
     if (!maxKw || maxKw <= 0) return setErr('Enter a valid max power (kW)');
+    const sched = form.schedule || { type: 'always' };
+    if (sched.type === 'daily' && (!sched.start || !sched.end))
+      return setErr('Enter start and end time for daily schedule');
+    if (sched.type === 'once' && (!sched.from || !sched.to))
+      return setErr('Enter from and to date/time for one-time schedule');
     try {
       if (editId) {
-        const updated = await updateCarProfile(editId, { ...form, maxKw });
+        const updated = await updateCarProfile(editId, { ...form, maxKw, schedule: sched });
         setProfiles(ps => ps.map(p => p.id === editId ? updated : p));
       } else {
-        const created = await createCarProfile({ ...form, maxKw });
+        const created = await createCarProfile({ ...form, maxKw, schedule: sched });
         setProfiles(ps => [...ps, created]);
       }
       closeForm();
     } catch (e) { setErr(e.message); }
+  }
+
+  function scheduleLabel(s) {
+    if (!s || s.type === 'always') return null;
+    if (s.type === 'daily') return `${s.start} – ${s.end} daily`;
+    if (s.type === 'once') {
+      const fmt = t => new Date(t).toLocaleString('en-MY', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return `${fmt(s.from)} → ${fmt(s.to)}`;
+    }
+    return null;
   }
 
   async function handleDelete(id) {
@@ -654,6 +673,7 @@ function ProfilesPage({ ocppCharger }) {
                 <span className="profile-name">{p.name}</span>
                 <span className="profile-sub">
                   {p.maxKw} kW &middot; {p.phases}-phase
+                  {scheduleLabel(p.schedule) && <> &middot; {scheduleLabel(p.schedule)}</>}
                 </span>
               </div>
               {activeId === p.id && <span className="profile-active-badge">Active</span>}
@@ -694,6 +714,51 @@ function ProfilesPage({ ocppCharger }) {
                 </button>
               ))}
             </div>
+
+            <label className="pf-label">Schedule</label>
+            <div className="pf-phases">
+              {['always', 'daily', 'once'].map(t => (
+                <button key={t}
+                  className={`pf-phase-btn ${(form.schedule?.type || 'always') === t ? 'selected' : ''}`}
+                  onClick={() => setSchedule({ type: t })}>
+                  {t === 'always' ? 'Always' : t === 'daily' ? 'Daily' : 'One-time'}
+                </button>
+              ))}
+            </div>
+
+            {form.schedule?.type === 'daily' && (
+              <div className="pf-time-row">
+                <div className="pf-time-field">
+                  <label className="pf-label">Start time</label>
+                  <input className="pf-input" type="time"
+                    value={form.schedule.start || ''}
+                    onChange={e => setSchedule({ start: e.target.value })} />
+                </div>
+                <div className="pf-time-field">
+                  <label className="pf-label">End time</label>
+                  <input className="pf-input" type="time"
+                    value={form.schedule.end || ''}
+                    onChange={e => setSchedule({ end: e.target.value })} />
+                </div>
+              </div>
+            )}
+
+            {form.schedule?.type === 'once' && (
+              <div className="pf-time-row">
+                <div className="pf-time-field">
+                  <label className="pf-label">From</label>
+                  <input className="pf-input" type="datetime-local"
+                    value={form.schedule.from || ''}
+                    onChange={e => setSchedule({ from: e.target.value })} />
+                </div>
+                <div className="pf-time-field">
+                  <label className="pf-label">To</label>
+                  <input className="pf-input" type="datetime-local"
+                    value={form.schedule.to || ''}
+                    onChange={e => setSchedule({ to: e.target.value })} />
+                </div>
+              </div>
+            )}
 
             <label className="pf-label">Color</label>
             <div className="pf-colors">
