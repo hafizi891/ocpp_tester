@@ -366,6 +366,29 @@ async function handleOcppCall(ocppIdentity, ws, uniqueId, action, payload) {
   ws.send(JSON.stringify([3, uniqueId, response]));
   logOcppMessage(ocppIdentity, 'outbound', `${action}.conf`, response);
   publishOcppState();
+
+  // After BootNotification: restore ChargePointMaxProfile (charger loses it on reboot)
+  if (action === 'BootNotification' && response.status === 'Accepted') {
+    setTimeout(() => applyDefaultMaxProfile(ocppIdentity), 2000);
+  }
+}
+
+function applyDefaultMaxProfile(ocppIdentity) {
+  const cmd = createOcppCommand(ocppIdentity, 'SetChargingProfile', {
+    connectorId: 0,
+    csChargingProfiles: {
+      chargingProfileId: 1,
+      stackLevel:        0,
+      chargingProfilePurpose: 'ChargePointMaxProfile',
+      chargingProfileKind:    'Absolute',
+      chargingSchedule: {
+        chargingRateUnit: 'A',
+        chargingSchedulePeriod: [{ startPeriod: 0, limit: 32, numberPhases: 3 }],
+      },
+    },
+  });
+  deliverCommand(cmd);
+  console.log(`[${ocppIdentity}] Auto-applied ChargePointMaxProfile 3-phase 32A on boot`);
 }
 
 // ── OCPP response builder (async — handles all 10 inbound message types) ──
