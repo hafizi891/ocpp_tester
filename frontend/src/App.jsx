@@ -62,9 +62,11 @@ function fmt(n, dec = 2) {
 
 // ── Home Page ─────────────────────────────────────────────────────────────────
 
-function HomePage({ charger, ocppCharger, activeSession, connected, onCommand, onForceClose, chargeLimit }) {
-  const [busy, setBusy] = useState(false);
-  const [stopSent, setStopSent] = useState(false);
+function HomePage({ charger, ocppCharger, activeSession, connected, onCommand, onForceClose, chargeLimit, ocppCommands }) {
+  const [busy, setBusy]               = useState(false);
+  const [stopSent, setStopSent]       = useState(false);
+  const [pendingCmdId, setPendingCmdId] = useState(null);
+  const [feedback, setFeedback]       = useState(null); // { type: 'info'|'success'|'error', text }
 
   const isCharging = charger?.status === 'active';
   const isFault    = charger?.status === 'fault';
@@ -80,8 +82,39 @@ function HomePage({ charger, ocppCharger, activeSession, connected, onCommand, o
     : isOnline ? 'available'
     : 'offline';
 
-  // Stuck session: DB shows charging but charger is not active
   const stuckSession = activeSession && !isCharging;
+
+  // Watch ocppCommands for charger's response to our pending command
+  useEffect(() => {
+    if (!pendingCmdId) return;
+    const cmd = ocppCommands?.find(c => c.id === pendingCmdId);
+    if (!cmd || cmd.status === 'pending' || cmd.status === 'sent') return;
+
+    if (cmd.status === 'accepted') {
+      if (cmd.response?.status === 'Accepted') {
+        setFeedback({ type: 'info', text: 'Accepted — waiting for charging to start…' });
+      } else {
+        const reason = cmd.response?.status || 'Rejected';
+        setFeedback({ type: 'error', text: `Charger rejected: ${reason}` });
+        setPendingCmdId(null);
+        setTimeout(() => setFeedback(null), 5000);
+      }
+    } else if (cmd.status === 'failed') {
+      setFeedback({ type: 'error', text: 'Command failed — charger may be offline' });
+      setPendingCmdId(null);
+      setTimeout(() => setFeedback(null), 5000);
+    }
+  }, [ocppCommands, pendingCmdId]);
+
+  // Confirm when charging actually starts
+  useEffect(() => {
+    if (!pendingCmdId) return;
+    if (isCharging) {
+      setFeedback({ type: 'success', text: 'Charging started!' });
+      setPendingCmdId(null);
+      setTimeout(() => setFeedback(null), 4000);
+    }
+  }, [isCharging, pendingCmdId]);
 
   async function handleAction() {
     if (busy) return;
@@ -89,16 +122,24 @@ function HomePage({ charger, ocppCharger, activeSession, connected, onCommand, o
     try {
       if (isCharging) {
         const txId = activeSession?.transactionId ?? activeSession?.id ?? 0;
-        await onCommand('RemoteStopTransaction', { transactionId: Number(txId) });
-        setStopSent(true); // show force-close hint after sending stop
+        const cmd = await onCommand('RemoteStopTransaction', { transactionId: Number(txId) });
+        setStopSent(true);
+        setFeedback({ type: 'info', text: 'Stop command sent' });
+        setTimeout(() => setFeedback(null), 4000);
       } else {
         setStopSent(false);
-        await onCommand('RemoteStartTransaction', { idTag: 'GUEST', connectorId: 1 });
+        setFeedback({ type: 'info', text: 'Sending…' });
+        const cmd = await onCommand('RemoteStartTransaction', { idTag: 'GUEST', connectorId: 1 });
+        if (cmd?.id) {
+          setPendingCmdId(cmd.id);
+          setFeedback({ type: 'info', text: 'Command sent — awaiting charger response…' });
+        }
       }
     } catch (_) {
-      // command queued even on error
+      setFeedback({ type: 'error', text: 'Failed to send command' });
+      setTimeout(() => setFeedback(null), 4000);
     } finally {
-      setTimeout(() => setBusy(false), 2000);
+      setTimeout(() => setBusy(false), 1500);
     }
   }
 
@@ -214,7 +255,17 @@ function HomePage({ charger, ocppCharger, activeSession, connected, onCommand, o
             {busy ? 'Sending…' : isCharging ? 'Stop Charging' : 'Start Charging'}
           </button>
         )}
-        {isCharging && stopSent && (
+
+        {feedback && (
+          <div className={`cmd-feedback cmd-feedback--${feedback.type}`}>
+            {feedback.type === 'success' && <span className="cmd-feedback-icon">✓</span>}
+            {feedback.type === 'error'   && <span className="cmd-feedback-icon">✕</span>}
+            {feedback.type === 'info'    && <span className="cmd-feedback-icon cmd-spin">⟳</span>}
+            {feedback.text}
+          </div>
+        )}
+
+        {isCharging && stopSent && !feedback && (
           <p className="action-hint">
             Stop sent. If charger still shows charging,{' '}
             <button className="link-btn" onClick={() => onForceClose(activeSession?.id)}>force close</button>
@@ -904,7 +955,7 @@ export default function App() {
     }
   }
 
-  const shared = { charger, ocppCharger, activeSession, connected, onCommand, onForceClose, chargeLimit };
+  const shared = { charger, ocppCharger, activeSession, connected, onCommand, onForceClose, chargeLimit, ocppCommands };
 
   return (
     <div className="app-shell">
