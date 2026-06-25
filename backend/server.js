@@ -387,34 +387,19 @@ async function handleOcppCall(ocppIdentity, ws, uniqueId, action, payload) {
   }
 }
 
-const DEFAULT_MAX_PROFILE_PAYLOAD = {
-  connectorId: 0,
-  csChargingProfiles: {
-    chargingProfileId: 1, stackLevel: 0,
-    chargingProfilePurpose: 'ChargePointMaxProfile',
-    chargingProfileKind: 'Absolute',
-    chargingSchedule: {
-      chargingRateUnit: 'A',
-      chargingSchedulePeriod: [{ startPeriod: 0, limit: 32, numberPhases: 3 }],
-    },
-  },
-};
-
 function restoreProfilesOnBoot(ocppIdentity) {
-  // Restore ChargePointMaxProfile — use what the user last set, or the hardware default
-  const maxPayload = savedProfiles.get('ChargePointMaxProfile') ?? DEFAULT_MAX_PROFILE_PAYLOAD;
-  const maxCmd = createOcppCommand(ocppIdentity, 'SetChargingProfile', maxPayload);
-  maxCmd._auto = true;
-  deliverCommand(maxCmd);
-  console.log(`[${ocppIdentity}] Boot restore: ChargePointMaxProfile`);
+  // Only restore what the user explicitly set — don't impose any default.
+  // If nothing was saved, let the charger use its own factory defaults.
+  if (savedProfiles.size === 0) {
+    console.log(`[${ocppIdentity}] Boot restore: no user profiles saved, skipping`);
+    return;
+  }
 
-  // Restore any user-set TxDefaultProfile (50% / 25% limit)
-  const txPayload = savedProfiles.get('TxDefaultProfile');
-  if (txPayload) {
-    const txCmd = createOcppCommand(ocppIdentity, 'SetChargingProfile', txPayload);
-    txCmd._auto = true;
-    deliverCommand(txCmd);
-    console.log(`[${ocppIdentity}] Boot restore: TxDefaultProfile`);
+  for (const [purpose, payload] of savedProfiles) {
+    const cmd = createOcppCommand(ocppIdentity, 'SetChargingProfile', payload);
+    cmd._auto = true;
+    deliverCommand(cmd);
+    console.log(`[${ocppIdentity}] Boot restore: ${purpose}`);
   }
 }
 
