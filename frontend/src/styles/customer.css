@@ -1,0 +1,216 @@
+/* ── Customer UI ─────────────────────────────────────────────────────────── */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #f8f8f8;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.cu-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 24px env(safe-area-inset-bottom, 16px);
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+/* Header */
+.cu-header {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 0 16px;
+  gap: 4px;
+}
+.cu-brand {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ff682c;
+  letter-spacing: -0.01em;
+}
+.cu-station {
+  font-size: 13px;
+  color: #888;
+}
+
+/* Status ring */
+.cu-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px 0;
+}
+
+.cu-ring {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 8px solid #1e7c4a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  transition: border-color 0.4s ease;
+}
+
+.cu-ring-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.cu-kw {
+  font-size: 48px;
+  font-weight: 700;
+  color: #1a1a1a;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+.cu-kw-unit {
+  font-size: 16px;
+  color: #888;
+  font-weight: 500;
+}
+.cu-status-icon {
+  font-size: 52px;
+  line-height: 1;
+}
+
+.cu-status-label {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  transition: color 0.4s ease;
+}
+
+.cu-kw-bar-wrap {
+  width: 180px;
+  height: 4px;
+  background: #e5e7eb;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.cu-kw-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 1s ease;
+}
+
+/* Session card */
+.cu-session-card {
+  width: 100%;
+  background: #fff;
+  border-radius: 16px;
+  padding: 16px 20px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cu-session-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.cu-session-label {
+  font-size: 14px;
+  color: #888;
+}
+.cu-session-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Feedback */
+.cu-feedback {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  margin-top: 8px;
+  animation: cu-fadein 0.2s ease;
+}
+@keyframes cu-fadein {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.cu-feedback--info    { background: #eff6ff; color: #2563eb; }
+.cu-feedback--success { background: #f0fdf4; color: #16a34a; }
+.cu-feedback--error   { background: #fef2f2; color: #dc2626; }
+
+/* Action button */
+.cu-action {
+  width: 100%;
+  padding: 20px 0 12px;
+}
+
+.cu-btn {
+  width: 100%;
+  padding: 18px;
+  border: none;
+  border-radius: 16px;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  letter-spacing: -0.01em;
+}
+.cu-btn:active  { transform: scale(0.98); }
+.cu-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.cu-btn--start {
+  background: #ff682c;
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(255,104,44,0.35);
+}
+.cu-btn--stop {
+  background: #1a1a1a;
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+}
+
+.cu-unavailable {
+  text-align: center;
+  font-size: 14px;
+  color: #888;
+  line-height: 1.6;
+  padding: 12px 0;
+}
+
+/* Footer */
+.cu-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #aaa;
+  padding: 16px 0 8px;
+}
+.cu-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ccc;
+}
+.cu-live-dot.on {
+  background: #22c55e;
+  animation: cu-pulse 2s infinite;
+}
+@keyframes cu-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
