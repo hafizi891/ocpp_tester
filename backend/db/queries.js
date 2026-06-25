@@ -1,5 +1,9 @@
 'use strict';
 
+// SQLite version — all functions accept a leading _db param for API compatibility
+// with server.js call sites, but use the module-level db directly.
+const db = require('./pool');
+
 // ── Row mappers (DB snake_case → JS camelCase) ────────────────────────────
 
 function rowToCharger(row) {
@@ -22,27 +26,27 @@ function rowToSession(row) {
     energyKwh:     Number(row.energy_kwh),
     amount:        Number(row.amount),
     status:        row.status,
-    transactionId: row.transaction_id ? Number(row.transaction_id) : null,
-    idTag:         row.id_tag   ?? null,
-    connectorId:   row.connector_id != null ? Number(row.connector_id) : 1,
-    meterStart:    row.meter_start  != null ? Number(row.meter_start)  : 0,
-    meterStop:     row.meter_stop   != null ? Number(row.meter_stop)   : null,
-    stopReason:    row.stop_reason  ?? null,
+    transactionId: row.transaction_id != null ? Number(row.transaction_id) : null,
+    idTag:         row.id_tag         ?? null,
+    connectorId:   row.connector_id   != null ? Number(row.connector_id) : 1,
+    meterStart:    row.meter_start     != null ? Number(row.meter_start)  : 0,
+    meterStop:     row.meter_stop      != null ? Number(row.meter_stop)   : null,
+    stopReason:    row.stop_reason    ?? null,
   };
 }
 
 function rowToCommand(row) {
   return {
-    id:             row.id,
-    ocppMessageId:  row.ocpp_message_id,
-    chargePointId:  row.charge_point_id,
-    action:         row.action,
-    payload:        row.payload,
-    status:         row.status,
-    createdAt:      row.created_at,
-    sentAt:         row.sent_at,
-    responseAt:     row.response_at,
-    response:       row.response,
+    id:            row.id,
+    ocppMessageId: row.ocpp_message_id,
+    chargePointId: row.charge_point_id,
+    action:        row.action,
+    payload:       row.payload  ? JSON.parse(row.payload)  : {},
+    status:        row.status,
+    createdAt:     row.created_at,
+    sentAt:        row.sent_at,
+    responseAt:    row.response_at,
+    response:      row.response ? JSON.parse(row.response) : null,
   };
 }
 
@@ -53,256 +57,21 @@ function rowToMessage(row) {
     chargePointId: row.charge_point_id,
     direction:     row.direction,
     action:        row.action,
-    payload:       row.payload,
+    payload:       row.payload ? JSON.parse(row.payload) : {},
   };
 }
 
 function rowToIdTag(row) {
   return {
-    idTag:        row.id_tag,
-    status:       row.status,
-    expiryDate:   row.expiry_date  ?? null,
-    parentIdTag:  row.parent_id_tag ?? null,
-    note:         row.note ?? '',
-    createdAt:    row.created_at,
-    updatedAt:    row.updated_at,
+    idTag:       row.id_tag,
+    status:      row.status,
+    expiryDate:  row.expiry_date   ?? null,
+    parentIdTag: row.parent_id_tag ?? null,
+    note:        row.note          ?? '',
+    createdAt:   row.created_at,
+    updatedAt:   row.updated_at,
   };
 }
-
-// ── Bootstrap ─────────────────────────────────────────────────────────────
-
-async function loadInitialState(pool) {
-  const [chargerRes, sessionRes, hourlyRes] = await Promise.all([
-    pool.query('SELECT * FROM chargers ORDER BY id'),
-    pool.query('SELECT * FROM sessions ORDER BY id'),
-    pool.query('SELECT kwh FROM hourly_energy ORDER BY hour'),
-  ]);
-  return {
-    chargers:     chargerRes.rows.map(rowToCharger),
-    sessions:     sessionRes.rows.map(rowToSession),
-    hourlyEnergy: hourlyRes.rows.map(r => Number(r.kwh)),
-  };
-}
-
-async function loadRecentMessages(pool, limit) {
-  const { rows } = await pool.query(
-    'SELECT * FROM ocpp_messages ORDER BY ts DESC LIMIT $1',
-    [limit]
-  );
-  return rows.map(rowToMessage).reverse();
-}
-
-async function loadRecentCommands(pool, limit) {
-  const { rows } = await pool.query(
-    'SELECT * FROM ocpp_commands ORDER BY created_at DESC LIMIT $1',
-    [limit]
-  );
-  return rows.map(rowToCommand).reverse();
-}
-
-// ── Chargers ──────────────────────────────────────────────────────────────
-
-async function upsertCharger(pool, c) {
-  await pool.query(
-    `INSERT INTO chargers (id, station, status, kw, max_kw, ocpp_identity)
-     VALUES ($1,$2,$3,$4,$5,$6)
-     ON CONFLICT (id) DO UPDATE SET
-       station       = EXCLUDED.station,
-       status        = EXCLUDED.status,
-       kw            = EXCLUDED.kw,
-       max_kw        = EXCLUDED.max_kw,
-       ocpp_identity = EXCLUDED.ocpp_identity,
-       updated_at    = NOW()`,
-    [c.id, c.station, c.status, c.kw, c.maxKw, c.ocppIdentity]
-  );
-}
-
-async function updateChargerStatus(pool, id, status) {
-  await pool.query(
-    'UPDATE chargers SET status = $1, updated_at = NOW() WHERE id = $2',
-    [status, id]
-  );
-}
-
-async function updateChargerKw(pool, id, kw) {
-  await pool.query(
-    'UPDATE chargers SET kw = $1, updated_at = NOW() WHERE id = $2',
-    [kw, id]
-  );
-}
-
-async function bulkUpdateChargerKw(pool, ids, kws) {
-  if (!ids.length) return;
-  await pool.query(
-    `UPDATE chargers AS c
-     SET kw = v.kw, updated_at = NOW()
-     FROM (SELECT unnest($1::text[]) AS id, unnest($2::numeric[]) AS kw) AS v
-     WHERE c.id = v.id`,
-    [ids, kws]
-  );
-}
-
-// ── Sessions ──────────────────────────────────────────────────────────────
-
-async function insertSession(pool, s) {
-  const { rows: [row] } = await pool.query(
-    `INSERT INTO sessions
-       (charger_id, user_name, started_at, energy_kwh, amount, status,
-        transaction_id, id_tag, connector_id, meter_start)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-     RETURNING *`,
-    [s.chargerId, s.user || '', s.startedAt || '', s.energyKwh ?? 0, s.amount ?? 0,
-     s.status || 'charging', s.transactionId ?? null, s.idTag ?? null,
-     s.connectorId ?? 1, s.meterStart ?? 0]
-  );
-  return rowToSession(row);
-}
-
-async function updateSessionOnStop(pool, id, fields) {
-  await pool.query(
-    `UPDATE sessions
-     SET status     = $2,
-         energy_kwh = $3,
-         amount     = $4,
-         meter_stop  = $5,
-         stop_reason = $6,
-         updated_at  = NOW()
-     WHERE id = $1`,
-    [id, fields.status, fields.energyKwh, fields.amount,
-     fields.meterStop ?? null, fields.stopReason ?? null]
-  );
-}
-
-async function incrementChargingSessionEnergy(pool, energyDelta, amountDelta) {
-  await pool.query(
-    `UPDATE sessions
-     SET energy_kwh = ROUND(energy_kwh + $1::numeric, 3),
-         amount     = ROUND(amount     + $2::numeric, 3),
-         updated_at = NOW()
-     WHERE status = 'charging'`,
-    [energyDelta, amountDelta]
-  );
-}
-
-async function updateSessionStatus(pool, id, status) {
-  await pool.query(
-    'UPDATE sessions SET status = $1, updated_at = NOW() WHERE id = $2',
-    [status, id]
-  );
-}
-
-// ── ID tags ───────────────────────────────────────────────────────────────
-
-async function getIdTagInfo(pool, idTag) {
-  if (!idTag) return null;
-  const { rows } = await pool.query(
-    'SELECT * FROM id_tags WHERE id_tag = $1',
-    [idTag]
-  );
-  if (!rows.length) return null;
-
-  const tag = rows[0];
-  if (tag.expiry_date && new Date(tag.expiry_date) < new Date()) {
-    return { status: 'Expired', expiryDate: tag.expiry_date };
-  }
-
-  const info = { status: tag.status };
-  if (tag.expiry_date)    info.expiryDate   = tag.expiry_date;
-  if (tag.parent_id_tag)  info.parentIdTag  = tag.parent_id_tag;
-  return info;
-}
-
-async function listIdTags(pool) {
-  const { rows } = await pool.query('SELECT * FROM id_tags ORDER BY id_tag');
-  return rows.map(rowToIdTag);
-}
-
-async function upsertIdTag(pool, tag) {
-  await pool.query(
-    `INSERT INTO id_tags (id_tag, status, expiry_date, parent_id_tag, note)
-     VALUES ($1,$2,$3,$4,$5)
-     ON CONFLICT (id_tag) DO UPDATE SET
-       status        = EXCLUDED.status,
-       expiry_date   = EXCLUDED.expiry_date,
-       parent_id_tag = EXCLUDED.parent_id_tag,
-       note          = EXCLUDED.note,
-       updated_at    = NOW()`,
-    [tag.idTag, tag.status || 'Accepted', tag.expiryDate ?? null,
-     tag.parentIdTag ?? null, tag.note ?? null]
-  );
-}
-
-async function deleteIdTag(pool, idTag) {
-  await pool.query('DELETE FROM id_tags WHERE id_tag = $1', [idTag]);
-}
-
-// ── Reservations ──────────────────────────────────────────────────────────
-
-async function upsertReservation(pool, r) {
-  await pool.query(
-    `INSERT INTO reservations (reservation_id, charger_id, connector_id, id_tag, expiry_date, status)
-     VALUES ($1,$2,$3,$4,$5,$6)
-     ON CONFLICT (reservation_id) DO UPDATE SET
-       status      = EXCLUDED.status,
-       expiry_date = EXCLUDED.expiry_date`,
-    [r.reservationId, r.chargerId, r.connectorId ?? 1, r.idTag, r.expiryDate, r.status ?? 'active']
-  );
-}
-
-async function cancelReservation(pool, reservationId) {
-  await pool.query(
-    `UPDATE reservations SET status = 'cancelled' WHERE reservation_id = $1`,
-    [reservationId]
-  );
-}
-
-// ── OCPP event log ────────────────────────────────────────────────────────
-
-async function logOcppEvent(pool, chargerId, eventType, status, payload) {
-  await pool.query(
-    `INSERT INTO ocpp_event_log (charger_id, event_type, status, payload)
-     VALUES ($1,$2,$3,$4::jsonb)`,
-    [chargerId, eventType, status, JSON.stringify(payload ?? {})]
-  );
-}
-
-// ── Charging profiles ─────────────────────────────────────────────────────
-
-async function upsertChargingProfile(pool, chargerId, connectorId, profile) {
-  const cp = profile.csChargingProfiles || profile;
-  await pool.query(
-    `INSERT INTO charging_profiles
-       (charger_id, connector_id, charging_profile_id, stack_level,
-        charging_profile_purpose, charging_profile_kind, recurrency_kind,
-        valid_from, valid_to, schedule)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)
-     ON CONFLICT (charger_id, connector_id, charging_profile_id) DO UPDATE SET
-       stack_level              = EXCLUDED.stack_level,
-       charging_profile_purpose = EXCLUDED.charging_profile_purpose,
-       charging_profile_kind    = EXCLUDED.charging_profile_kind,
-       recurrency_kind          = EXCLUDED.recurrency_kind,
-       valid_from               = EXCLUDED.valid_from,
-       valid_to                 = EXCLUDED.valid_to,
-       schedule                 = EXCLUDED.schedule,
-       created_at               = NOW()`,
-    [chargerId, connectorId ?? 0, cp.chargingProfileId, cp.stackLevel ?? 0,
-     cp.chargingProfilePurpose, cp.chargingProfileKind,
-     cp.recurrencyKind ?? null, cp.validFrom ?? null, cp.validTo ?? null,
-     JSON.stringify(cp.chargingSchedule ?? {})]
-  );
-}
-
-async function clearChargingProfiles(pool, chargerId, { id, connectorId, purpose, stackLevel } = {}) {
-  let q = 'DELETE FROM charging_profiles WHERE charger_id = $1';
-  const params = [chargerId];
-  if (connectorId != null) { params.push(connectorId); q += ` AND connector_id = $${params.length}`; }
-  if (id          != null) { params.push(id);          q += ` AND charging_profile_id = $${params.length}`; }
-  if (purpose     != null) { params.push(purpose);     q += ` AND charging_profile_purpose = $${params.length}`; }
-  if (stackLevel  != null) { params.push(stackLevel);  q += ` AND stack_level = $${params.length}`; }
-  await pool.query(q, params);
-}
-
-// ── Car profiles ──────────────────────────────────────────────────────────
 
 function rowToCarProfile(row) {
   return {
@@ -311,84 +80,295 @@ function rowToCarProfile(row) {
     maxKw:    Number(row.max_kw),
     phases:   Number(row.phases),
     color:    row.color,
-    schedule: row.schedule ?? { type: 'always' },
+    schedule: row.schedule
+      ? (typeof row.schedule === 'string' ? JSON.parse(row.schedule) : row.schedule)
+      : { type: 'always' },
   };
 }
 
-async function listCarProfiles(pool) {
-  const { rows } = await pool.query('SELECT * FROM car_profiles ORDER BY id');
-  return rows.map(rowToCarProfile);
+// ── Bootstrap ─────────────────────────────────────────────────────────────
+
+function loadInitialState(_db) {
+  const chargers     = db.prepare('SELECT * FROM chargers ORDER BY id').all().map(rowToCharger);
+  const sessions     = db.prepare('SELECT * FROM sessions ORDER BY id').all().map(rowToSession);
+  const hourlyEnergy = db.prepare('SELECT kwh FROM hourly_energy ORDER BY hour').all().map(r => Number(r.kwh));
+  return Promise.resolve({ chargers, sessions, hourlyEnergy });
 }
 
-async function insertCarProfile(pool, p) {
-  const { rows: [row] } = await pool.query(
-    `INSERT INTO car_profiles (name, max_kw, phases, color, schedule)
-     VALUES ($1,$2,$3,$4,$5::jsonb) RETURNING *`,
-    [p.name, p.maxKw, p.phases ?? 3, p.color ?? '#6366f1',
-     JSON.stringify(p.schedule ?? { type: 'always' })]
+function loadRecentMessages(_db, limit) {
+  const rows = db.prepare('SELECT * FROM ocpp_messages ORDER BY ts DESC LIMIT ?').all(limit);
+  return Promise.resolve(rows.map(rowToMessage).reverse());
+}
+
+function loadRecentCommands(_db, limit) {
+  const rows = db.prepare('SELECT * FROM ocpp_commands ORDER BY created_at DESC LIMIT ?').all(limit);
+  return Promise.resolve(rows.map(rowToCommand).reverse());
+}
+
+// ── Chargers ──────────────────────────────────────────────────────────────
+
+function upsertCharger(_db, c) {
+  db.prepare(`
+    INSERT INTO chargers (id, station, status, kw, max_kw, ocpp_identity)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      station       = excluded.station,
+      status        = excluded.status,
+      kw            = excluded.kw,
+      max_kw        = excluded.max_kw,
+      ocpp_identity = excluded.ocpp_identity,
+      updated_at    = datetime('now')
+  `).run(c.id, c.station, c.status, c.kw, c.maxKw, c.ocppIdentity);
+  return Promise.resolve();
+}
+
+function updateChargerStatus(_db, id, status) {
+  db.prepare(`UPDATE chargers SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(status, id);
+  return Promise.resolve();
+}
+
+function updateChargerKw(_db, id, kw) {
+  db.prepare(`UPDATE chargers SET kw = ?, updated_at = datetime('now') WHERE id = ?`).run(kw, id);
+  return Promise.resolve();
+}
+
+function bulkUpdateChargerKw(_db, ids, kws) {
+  if (!ids.length) return Promise.resolve();
+  const stmt = db.prepare(`UPDATE chargers SET kw = ?, updated_at = datetime('now') WHERE id = ?`);
+  db.exec('BEGIN');
+  try {
+    ids.forEach((id, i) => stmt.run(kws[i], id));
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  return Promise.resolve();
+}
+
+// ── Sessions ──────────────────────────────────────────────────────────────
+
+function insertSession(_db, s) {
+  const { lastInsertRowid } = db.prepare(`
+    INSERT INTO sessions
+      (charger_id, user_name, started_at, energy_kwh, amount, status,
+       transaction_id, id_tag, connector_id, meter_start)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    s.chargerId, s.user || '', s.startedAt || '', s.energyKwh ?? 0, s.amount ?? 0,
+    s.status || 'charging', s.transactionId ?? null, s.idTag ?? null,
+    s.connectorId ?? 1, s.meterStart ?? 0,
   );
-  return rowToCarProfile(row);
+  const row = db.prepare('SELECT * FROM sessions WHERE id = ?').get(lastInsertRowid);
+  return Promise.resolve(rowToSession(row));
 }
 
-async function updateCarProfile(pool, id, p) {
-  const { rows: [row] } = await pool.query(
-    `UPDATE car_profiles
-     SET name = $2, max_kw = $3, phases = $4, color = $5, schedule = $6::jsonb, updated_at = NOW()
-     WHERE id = $1 RETURNING *`,
-    [id, p.name, p.maxKw, p.phases ?? 3, p.color ?? '#6366f1',
-     JSON.stringify(p.schedule ?? { type: 'always' })]
+function updateSessionOnStop(_db, id, fields) {
+  db.prepare(`
+    UPDATE sessions
+    SET status = ?, energy_kwh = ?, amount = ?, meter_stop = ?, stop_reason = ?,
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(fields.status, fields.energyKwh, fields.amount,
+         fields.meterStop ?? null, fields.stopReason ?? null, id);
+  return Promise.resolve();
+}
+
+function incrementChargingSessionEnergy(_db, energyDelta, amountDelta) {
+  db.prepare(`
+    UPDATE sessions
+    SET energy_kwh = ROUND(energy_kwh + ?, 3),
+        amount     = ROUND(amount     + ?, 3),
+        updated_at = datetime('now')
+    WHERE status = 'charging'
+  `).run(energyDelta, amountDelta);
+  return Promise.resolve();
+}
+
+function updateSessionStatus(_db, id, status) {
+  db.prepare(`UPDATE sessions SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(status, id);
+  return Promise.resolve();
+}
+
+// ── ID tags ───────────────────────────────────────────────────────────────
+
+function getIdTagInfo(_db, idTag) {
+  if (!idTag) return Promise.resolve(null);
+  const row = db.prepare('SELECT * FROM id_tags WHERE id_tag = ?').get(idTag);
+  if (!row) return Promise.resolve(null);
+  if (row.expiry_date && new Date(row.expiry_date) < new Date()) {
+    return Promise.resolve({ status: 'Expired', expiryDate: row.expiry_date });
+  }
+  const info = { status: row.status };
+  if (row.expiry_date)   info.expiryDate  = row.expiry_date;
+  if (row.parent_id_tag) info.parentIdTag = row.parent_id_tag;
+  return Promise.resolve(info);
+}
+
+function listIdTags(_db) {
+  return Promise.resolve(db.prepare('SELECT * FROM id_tags ORDER BY id_tag').all().map(rowToIdTag));
+}
+
+function upsertIdTag(_db, tag) {
+  db.prepare(`
+    INSERT INTO id_tags (id_tag, status, expiry_date, parent_id_tag, note)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(id_tag) DO UPDATE SET
+      status        = excluded.status,
+      expiry_date   = excluded.expiry_date,
+      parent_id_tag = excluded.parent_id_tag,
+      note          = excluded.note,
+      updated_at    = datetime('now')
+  `).run(tag.idTag, tag.status || 'Accepted', tag.expiryDate ?? null,
+         tag.parentIdTag ?? null, tag.note ?? null);
+  return Promise.resolve();
+}
+
+function deleteIdTag(_db, idTag) {
+  db.prepare('DELETE FROM id_tags WHERE id_tag = ?').run(idTag);
+  return Promise.resolve();
+}
+
+// ── Reservations ──────────────────────────────────────────────────────────
+
+function upsertReservation(_db, r) {
+  db.prepare(`
+    INSERT INTO reservations (reservation_id, charger_id, connector_id, id_tag, expiry_date, status)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(reservation_id) DO UPDATE SET
+      status      = excluded.status,
+      expiry_date = excluded.expiry_date
+  `).run(r.reservationId, r.chargerId, r.connectorId ?? 1,
+         r.idTag, r.expiryDate, r.status ?? 'active');
+  return Promise.resolve();
+}
+
+function cancelReservation(_db, reservationId) {
+  db.prepare(`UPDATE reservations SET status = 'cancelled' WHERE reservation_id = ?`).run(reservationId);
+  return Promise.resolve();
+}
+
+// ── OCPP event log ────────────────────────────────────────────────────────
+
+function logOcppEvent(_db, chargerId, eventType, status, payload) {
+  db.prepare(`
+    INSERT INTO ocpp_event_log (charger_id, event_type, status, payload)
+    VALUES (?, ?, ?, ?)
+  `).run(chargerId, eventType, status, JSON.stringify(payload ?? {}));
+  return Promise.resolve();
+}
+
+// ── Charging profiles ─────────────────────────────────────────────────────
+
+function upsertChargingProfile(_db, chargerId, connectorId, profile) {
+  const cp = profile.csChargingProfiles || profile;
+  db.prepare(`
+    INSERT INTO charging_profiles
+      (charger_id, connector_id, charging_profile_id, stack_level,
+       charging_profile_purpose, charging_profile_kind, recurrency_kind,
+       valid_from, valid_to, schedule)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(charger_id, connector_id, charging_profile_id) DO UPDATE SET
+      stack_level              = excluded.stack_level,
+      charging_profile_purpose = excluded.charging_profile_purpose,
+      charging_profile_kind    = excluded.charging_profile_kind,
+      recurrency_kind          = excluded.recurrency_kind,
+      valid_from               = excluded.valid_from,
+      valid_to                 = excluded.valid_to,
+      schedule                 = excluded.schedule,
+      created_at               = datetime('now')
+  `).run(
+    chargerId, connectorId ?? 0, cp.chargingProfileId, cp.stackLevel ?? 0,
+    cp.chargingProfilePurpose, cp.chargingProfileKind,
+    cp.recurrencyKind ?? null, cp.validFrom ?? null, cp.validTo ?? null,
+    JSON.stringify(cp.chargingSchedule ?? {}),
   );
-  return row ? rowToCarProfile(row) : null;
+  return Promise.resolve();
 }
 
-async function deleteCarProfile(pool, id) {
-  await pool.query('DELETE FROM car_profiles WHERE id = $1', [id]);
+function clearChargingProfiles(_db, chargerId, { id, connectorId, purpose, stackLevel } = {}) {
+  let q = 'DELETE FROM charging_profiles WHERE charger_id = ?';
+  const params = [chargerId];
+  if (connectorId != null) { params.push(connectorId); q += ' AND connector_id = ?'; }
+  if (id          != null) { params.push(id);          q += ' AND charging_profile_id = ?'; }
+  if (purpose     != null) { params.push(purpose);     q += ' AND charging_profile_purpose = ?'; }
+  if (stackLevel  != null) { params.push(stackLevel);  q += ' AND stack_level = ?'; }
+  db.prepare(q).run(...params);
+  return Promise.resolve();
 }
 
-async function getCarProfile(pool, id) {
-  const { rows: [row] } = await pool.query(
-    'SELECT * FROM car_profiles WHERE id = $1', [id]
-  );
-  return row ? rowToCarProfile(row) : null;
+// ── Car profiles ──────────────────────────────────────────────────────────
+
+function listCarProfiles(_db) {
+  return Promise.resolve(db.prepare('SELECT * FROM car_profiles ORDER BY id').all().map(rowToCarProfile));
+}
+
+function insertCarProfile(_db, p) {
+  const { lastInsertRowid } = db.prepare(`
+    INSERT INTO car_profiles (name, max_kw, phases, color, schedule)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(p.name, p.maxKw, p.phases ?? 3, p.color ?? '#6366f1',
+         JSON.stringify(p.schedule ?? { type: 'always' }));
+  const row = db.prepare('SELECT * FROM car_profiles WHERE id = ?').get(lastInsertRowid);
+  return Promise.resolve(rowToCarProfile(row));
+}
+
+function updateCarProfile(_db, id, p) {
+  db.prepare(`
+    UPDATE car_profiles
+    SET name = ?, max_kw = ?, phases = ?, color = ?, schedule = ?,
+        updated_at = datetime('now')
+    WHERE id = ?
+  `).run(p.name, p.maxKw, p.phases ?? 3, p.color ?? '#6366f1',
+         JSON.stringify(p.schedule ?? { type: 'always' }), id);
+  const row = db.prepare('SELECT * FROM car_profiles WHERE id = ?').get(id);
+  return Promise.resolve(row ? rowToCarProfile(row) : null);
+}
+
+function deleteCarProfile(_db, id) {
+  db.prepare('DELETE FROM car_profiles WHERE id = ?').run(id);
+  return Promise.resolve();
+}
+
+function getCarProfile(_db, id) {
+  const row = db.prepare('SELECT * FROM car_profiles WHERE id = ?').get(Number(id));
+  return Promise.resolve(row ? rowToCarProfile(row) : null);
 }
 
 // ── OCPP commands ─────────────────────────────────────────────────────────
 
-async function insertOcppCommand(pool, cmd) {
-  await pool.query(
-    `INSERT INTO ocpp_commands
-       (id, ocpp_message_id, charge_point_id, action, payload, status, created_at)
-     VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7::timestamptz)`,
-    [cmd.id, cmd.ocppMessageId, cmd.chargePointId, cmd.action,
-     JSON.stringify(cmd.payload), cmd.status, cmd.createdAt]
-  );
+function insertOcppCommand(_db, cmd) {
+  db.prepare(`
+    INSERT INTO ocpp_commands
+      (id, ocpp_message_id, charge_point_id, action, payload, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(cmd.id, cmd.ocppMessageId, cmd.chargePointId, cmd.action,
+         JSON.stringify(cmd.payload), cmd.status, cmd.createdAt);
+  return Promise.resolve();
 }
 
-async function markOcppCommandSent(pool, id, sentAt) {
-  await pool.query(
-    `UPDATE ocpp_commands SET status = 'sent', sent_at = $2::timestamptz WHERE id = $1`,
-    [id, sentAt]
-  );
+function markOcppCommandSent(_db, id, sentAt) {
+  db.prepare(`UPDATE ocpp_commands SET status = 'sent', sent_at = ? WHERE id = ?`).run(sentAt, id);
+  return Promise.resolve();
 }
 
-async function markOcppCommandResult(pool, id, status, responseAt, response) {
-  await pool.query(
-    `UPDATE ocpp_commands
-     SET status = $2, response_at = $3::timestamptz, response = $4::jsonb
-     WHERE id = $1`,
-    [id, status, responseAt, JSON.stringify(response ?? null)]
-  );
+function markOcppCommandResult(_db, id, status, responseAt, response) {
+  db.prepare(`
+    UPDATE ocpp_commands SET status = ?, response_at = ?, response = ? WHERE id = ?
+  `).run(status, responseAt, JSON.stringify(response ?? null), id);
+  return Promise.resolve();
 }
 
 // ── OCPP messages ─────────────────────────────────────────────────────────
 
-async function insertOcppMessage(pool, msg) {
-  await pool.query(
-    `INSERT INTO ocpp_messages (id, ts, charge_point_id, direction, action, payload)
-     VALUES ($1,$2::timestamptz,$3,$4,$5,$6::jsonb)
-     ON CONFLICT (id) DO NOTHING`,
-    [msg.id, msg.ts, msg.chargePointId, msg.direction, msg.action, JSON.stringify(msg.payload)]
-  );
+function insertOcppMessage(_db, msg) {
+  db.prepare(`
+    INSERT OR IGNORE INTO ocpp_messages
+      (id, ts, charge_point_id, direction, action, payload)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(msg.id, msg.ts, msg.chargePointId, msg.direction, msg.action,
+         JSON.stringify(msg.payload));
+  return Promise.resolve();
 }
 
 // ── Retention ─────────────────────────────────────────────────────────────
@@ -401,11 +381,11 @@ function parseRetentionMs(str) {
   return n * units[match[2].toLowerCase()];
 }
 
-async function pruneOldMessages(pool, retentionMs) {
-  return pool.query(
-    `DELETE FROM ocpp_messages WHERE created_at < NOW() - ($1 || ' milliseconds')::interval`,
-    [retentionMs]
-  );
+function pruneOldMessages(_db, retentionMs) {
+  const secs = Math.floor(retentionMs / 1000);
+  db.prepare(`DELETE FROM ocpp_messages WHERE created_at < datetime('now', ?)`)
+    .run(`-${secs} seconds`);
+  return Promise.resolve();
 }
 
 module.exports = {
