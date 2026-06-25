@@ -7,6 +7,7 @@ import {
   fetchOcppConfig,
   fetchOcppChargePoints,
   fetchOcppMessages,
+  fetchOcppCommands,
   sendOcppCommand,
   fetchLogs,
   forceCloseSession,
@@ -56,7 +57,7 @@ function fmt(n, dec = 2) {
 
 // ── Home Page ─────────────────────────────────────────────────────────────────
 
-function HomePage({ charger, ocppCharger, activeSession, connected, onCommand, onForceClose }) {
+function HomePage({ charger, ocppCharger, activeSession, connected, onCommand, onForceClose, chargeLimit }) {
   const [busy, setBusy] = useState(false);
   const [stopSent, setStopSent] = useState(false);
 
@@ -147,6 +148,11 @@ function HomePage({ charger, ocppCharger, activeSession, connected, onCommand, o
         {(charger?.id || ocppCharger?.ocppIdentity) && (
           <span className="charger-id-label">
             {charger?.id || ocppCharger?.ocppIdentity}
+          </span>
+        )}
+        {chargeLimit && (
+          <span className={`charge-limit-badge ${chargeLimit.kw === null ? 'no-limit' : 'has-limit'}`}>
+            Profile: {chargeLimit.label}
           </span>
         )}
       </div>
@@ -513,6 +519,7 @@ export default function App() {
   const [sessions, setSessions]                 = useState([]);
   const [ocppChargePoints, setOcppChargePoints] = useState([]);
   const [ocppMessages, setOcppMessages]         = useState([]);
+  const [ocppCommands, setOcppCommands]         = useState([]);
   const [ocppConfig, setOcppConfig]             = useState({});
 
   useEffect(() => {
@@ -529,6 +536,7 @@ export default function App() {
       fetchOcppConfig().then(setOcppConfig),
       fetchOcppChargePoints().then(setOcppChargePoints),
       fetchOcppMessages().then(setOcppMessages),
+      fetchOcppCommands().then(setOcppCommands),
     ]).finally(hideSplash);
 
     const splashTimer = setTimeout(hideSplash, 3000);
@@ -540,6 +548,7 @@ export default function App() {
     socket.on('sessions:update',          setSessions);
     socket.on('ocpp:chargePoints:update', setOcppChargePoints);
     socket.on('ocpp:messages:update',     setOcppMessages);
+    socket.on('ocpp:commands:update',     setOcppCommands);
 
     return () => {
       clearTimeout(splashTimer);
@@ -549,6 +558,7 @@ export default function App() {
       socket.off('sessions:update');
       socket.off('ocpp:chargePoints:update');
       socket.off('ocpp:messages:update');
+      socket.off('ocpp:commands:update');
       socket.disconnect();
     };
   }, []);
@@ -556,6 +566,27 @@ export default function App() {
   const charger       = chargers[0];
   const ocppCharger   = ocppChargePoints[0];
   const activeSession = sessions.find(s => s.status === 'charging');
+
+  // Derive current charging limit from most recent accepted profile command
+  function activeChargeLimit() {
+    const cmds = [...ocppCommands]
+      .filter(c => (c.action === 'SetChargingProfile' || c.action === 'ClearChargingProfile')
+                && c.status === 'accepted' && c.response?.status === 'Accepted')
+      .sort((a, b) => new Date(b.responseAt) - new Date(a.responseAt));
+    if (!cmds.length) return null;
+    const latest = cmds[0];
+    if (latest.action === 'ClearChargingProfile') return { label: 'No limit', kw: null };
+    const schedule = latest.payload?.csChargingProfiles?.chargingSchedule;
+    const period   = schedule?.chargingSchedulePeriod?.[0];
+    if (!period) return null;
+    const phases = period.numberPhases || 3;
+    const kw = schedule.chargingRateUnit === 'W'
+      ? period.limit / 1000
+      : (period.limit * phases * 230) / 1000;
+    return { label: `${kw.toFixed(1)} kW`, kw };
+  }
+
+  const chargeLimit = activeChargeLimit();
 
   async function onCommand(action, payload = {}) {
     if (!ocppCharger?.ocppIdentity) return;
@@ -570,7 +601,7 @@ export default function App() {
     }
   }
 
-  const shared = { charger, ocppCharger, activeSession, connected, onCommand, onForceClose };
+  const shared = { charger, ocppCharger, activeSession, connected, onCommand, onForceClose, chargeLimit };
 
   return (
     <div className="app-shell">

@@ -166,6 +166,21 @@ body {
   letter-spacing: 0.05em;
 }
 
+.charge-limit-badge {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-weight: 600;
+}
+.charge-limit-badge.has-limit {
+  background: rgba(255,104,44,0.12);
+  color: var(--orange);
+}
+.charge-limit-badge.no-limit {
+  background: var(--chalk);
+  color: var(--muted);
+}
+
 /* ── Station name ────────────────────────────────────────────────────────── */
 .station-name {
   font-size: 13px;
