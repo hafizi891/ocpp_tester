@@ -592,6 +592,23 @@ async function applyOcppDomainEvent(charger, action, payload) {
 
   if (action === 'MeterValues') {
     const samples = payload.meterValue?.[0]?.sampledValue || [];
+
+    // Live session energy from Energy.Active.Import (Wh) meter reading
+    const energySv = samples.find(s => s.measurand === 'Energy.Active.Import' && !s.phase);
+    if (energySv) {
+      const meterWh = Number(energySv.value);
+      const activeSession = sessions.find(s => s.chargerId === charger.id && s.status === 'charging');
+      if (activeSession && !Number.isNaN(meterWh)) {
+        const energyKwh = Math.max(0, +((meterWh - (activeSession.meterStart || 0)) / 1000).toFixed(3));
+        if (energyKwh !== activeSession.energyKwh) {
+          activeSession.energyKwh = energyKwh;
+          queries.updateSessionEnergy(pool, activeSession.id, energyKwh)
+            .catch(err => console.error('updateSessionEnergy:', err.message));
+          io.emit('sessions:update', sessions);
+        }
+      }
+    }
+
     // Prefer Power.Active.Import (W), fall back to Current.Import L1 × Voltage L1-N
     const powerSv   = samples.find(s => s.measurand === 'Power.Active.Import');
     const currentSv = samples.find(s => s.measurand === 'Current.Import' && (!s.phase || s.phase === 'L1'));

@@ -185,6 +185,12 @@ function incrementChargingSessionEnergy(_db, energyDelta, amountDelta) {
   return Promise.resolve();
 }
 
+function updateSessionEnergy(_db, id, energyKwh) {
+  db.prepare(`UPDATE sessions SET energy_kwh = ?, updated_at = datetime('now') WHERE id = ?`)
+    .run(energyKwh, id);
+  return Promise.resolve();
+}
+
 function updateSessionStatus(_db, id, status) {
   db.prepare(`UPDATE sessions SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(status, id);
   return Promise.resolve();
@@ -394,7 +400,7 @@ module.exports = {
   // chargers
   upsertCharger, updateChargerStatus, updateChargerKw, bulkUpdateChargerKw,
   // sessions
-  insertSession, updateSessionOnStop, incrementChargingSessionEnergy, updateSessionStatus,
+  insertSession, updateSessionOnStop, incrementChargingSessionEnergy, updateSessionEnergy, updateSessionStatus,
   // id tags
   getIdTagInfo, listIdTags, upsertIdTag, deleteIdTag,
   // reservations
